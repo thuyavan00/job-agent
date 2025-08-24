@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #111; line-height: 1.35; }
+    .name { font-size: 22px; font-weight: 700; }
+    .muted { color: #444; }
+    .section { margin-top: 14px; }
+    .block { margin-top: 6px; }
+    ul { margin: 6px 0 0 16px; padding: 0; }
+    li { margin-bottom: 4px; }
+    .row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .sep::before { content: "· "; }
+  </style>
+</head>
+<body>
+  <div class="name">{{profile.basics.fullName}}</div>
+
+  <div class="muted row">
+    <div>{{profile.basics.location}}</div>
+    <div class="sep">{{profile.basics.email}}</div>
+    {{#if profile.basics.phone}}<div class="sep">{{profile.basics.phone}}</div>{{/if}}
+    {{#if profile.basics.linkedIn}}<div class="sep">{{profile.basics.linkedIn}}</div>{{/if}}
+    {{#if profile.basics.github}}<div class="sep">{{profile.basics.github}}</div>{{/if}}
+    {{#if profile.basics.website}}<div class="sep">{{profile.basics.website}}</div>{{/if}}
+  </div>
+
+  {{#if profile.basics.summary}}
+  <div class="section"><strong>Professional Summary</strong>
+    <div class="block">{{profile.basics.summary}}</div>
+  </div>
+  {{/if}}
+
+  {{#if profile.skills.length}}
+  <div class="section"><strong>Skills & Technologies</strong>
+    <div class="block">{{#each profile.skills}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}</div>
+  </div>
+  {{/if}}
+
+  {{#if profile.experience.length}}
+  <div class="section"><strong>Work Experience</strong>
+    {{#each profile.experience}}
+      <div class="block">
+        <div><strong>{{jobTitle}}</strong> — {{company}} {{#if location}}({{location}}){{/if}}</div>
+        <div class="muted">{{startDate}} – {{#if endDate}}{{endDate}}{{else}}Present{{/if}}</div>
+        {{#if bullets.length}}
+        <ul>
+          {{#each bullets}}<li>{{this}}</li>{{/each}}
+        </ul>
+        {{/if}}
+      </div>
+    {{/each}}
+  </div>
+  {{/if}}
+
+  {{#if profile.projects.length}}
+  <div class="section"><strong>Projects</strong>
+    {{#each profile.projects}}
+      <div class="block">
+        <div><strong>{{title}}</strong>
+          {{#if liveDemoUrl}} — {{liveDemoUrl}}{{/if}}
+          {{#if repoUrl}} — {{repoUrl}}{{/if}}
+        </div>
+        <div>{{description}}</div>
+        {{#if technologies.length}}
+          <div class="muted">Tech: {{#each technologies}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}</div>
+        {{/if}}
+      </div>
+    {{/each}}
+  </div>
+  {{/if}}
+
+  {{#if profile.education.length}}
+  <div class="section"><strong>Education</strong>
+    {{#each profile.education}}
+      <div class="block">
+        <div><strong>{{degree}}</strong> — {{institution}} {{#if location}}({{location}}){{/if}}</div>
+        <div class="muted">{{startDate}} – {{endDate}}{{#if gpa}} · GPA: {{gpa}}{{/if}}</div>
+      </div>
+    {{/each}}
+  </div>
+  {{/if}}
+</body>
+</html>

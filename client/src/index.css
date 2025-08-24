@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+/* ===== Tailwind v4 CSS-first theme ===== */
+@theme {
+  /* app surfaces */
+  --color-bg: #000000; /* page + sidebar */
+  --color-card: #11161d; /* cards */
+  --color-border: #2a3642; /* subtle borders */
+  --color-text: #e6edf3; /* primary text */
+  --color-text-2: #9fb2c2; /* secondary text */
+  --color-accent: #22c55e; /* brand green for rings/buttons */
+  --colot-complete: #ffffff; /* used in progress bars */
+
+  /* form fields */
+  --color-input-bg: #0d0d0d;
+  --color-input-border: #2a2a3b;
+  --color-input-focus: #2b2b2b; /* used by ring-input-focus */
+
+  /* optional hovers */
+  --color-surface-hover: #151b23;
+}
+
+/* ===== App globals ===== */
+:root {
+  color-scheme: dark;
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+body {
+  /* page background + default text */
+  @apply bg-bg text-text;
+}
+
+/* 🔆 Light theme overrides (just swap the variables) */
+[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: #f8fafc; /* slate-50 */
+  --color-card: #ffffff;
+  --color-border: #e2e8f0; /* slate-200 */
+  --color-text: #0f172a; /* slate-900 */
+  --color-text-2: #475569; /* slate-600 */
+  --color-accent: #16a34a; /* green-600 */
+
+  --color-input-bg: #f1f5f9; /* slate-100 */
+  --color-input-border: #cbd5e1; /* slate-300 */
+  --color-input-focus: #16a34a; /* green-600 */
+}
+
+/* Optional: explicit dark attribute (lets users force dark even if system=light) */
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+/* ===== Inputs: consistent look across states ===== */
+.input-base {
+  @apply bg-input-bg text-white
+         border border-input-border rounded-lg px-3 py-2 text-sm w-full
+         placeholder-gray-400
+         focus:outline-none focus:ring-2 focus:ring-input-focus
+         [appearance:none];
+}
+
+/* If you prefer utilities only, you can skip .input-base and inline the classes */
+
+/* ===== Autofill (Chrome) ===== */
+input:-webkit-autofill,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px var(--color-input-bg) inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff !important;
+}
