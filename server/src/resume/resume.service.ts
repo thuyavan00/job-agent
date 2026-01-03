@@ -1,15 +1,16 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, InternalServerErrorException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import * as path from "node:path";
-import * as fs from "node:fs/promises";
+import * as fsys from "node:fs/promises";
 import Handlebars from "handlebars";
 import * as puppeteer from "puppeteer";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import { User } from "./entities/user.entity";
 import { Profile } from "@resume/entities/profile.entity";
 import { UpsertProfileDto } from "./dto/profile.dto";
-
+import { spawn } from "child_process";
+import * as fs from "node:fs";
 type RenderInput = {
   docType: "resume" | "cover_letter";
   templateId: string; // "simple-ats"
@@ -106,7 +107,7 @@ export class ResumeService {
 
   async renderHTML(templateId: string, name: "resume" | "cover", context: any) {
     const file = this.templatePath(templateId, name);
-    const src = await fs.readFile(file, "utf8");
+    const src = await fsys.readFile(file, "utf8");
     const tpl = Handlebars.compile(src, { noEscape: true });
     return tpl(context);
   }
@@ -153,13 +154,13 @@ export class ResumeService {
       ],
     });
     const buffer = await Packer.toBuffer(doc);
-    await fs.writeFile(outPath, buffer);
+    await fsys.writeFile(outPath, buffer);
   }
 
   async renderDocument(email: string, input: RenderInput) {
     const profile = await this.getProfile(email);
     const outDir = path.join(process.cwd(), "generated", email.replace(/[^a-zA-Z0-9@.]/g, "_"));
-    await fs.mkdir(outDir, { recursive: true });
+    await fsys.mkdir(outDir, { recursive: true });
     const base = process.env.PUBLIC_APP_URL ?? "http://localhost:3000";
 
     // Add a version number to the file name to prevent caching
@@ -187,5 +188,54 @@ export class ResumeService {
     const pdfPath = path.join(outDir, `cover-${input.templateId}-v${version}.pdf`);
     await this.renderPDF(html, pdfPath);
     return { pdfUrl: `${base}/static${pdfPath.split("generated")[1]}` };
+  }
+
+  async tailorResume(resumeText: string, jdText: string): Promise<string> {
+    const pythonProjectDir = process.env.AGENT_PATH;
+    if (!pythonProjectDir || !fs.existsSync(pythonProjectDir)) {
+      throw new Error(`AGENT_PATH directory not found: ${pythonProjectDir}`);
+    }
+
+    return new Promise((resolve, reject) => {
+      const pythonProcess = spawn("/usr/bin/uv", ["run", "main.py"], {
+        cwd: pythonProjectDir,
+        shell: true,
+        env: {
+          ...process.env, // This ensures PATH is passed through
+          PATH: process.env.PATH,
+        },
+      });
+
+      let result = "";
+      let errorData = "";
+
+      // Capture the output
+      pythonProcess.stdout.on("data", (data) => {
+        result += data.toString();
+      });
+
+      // Capture errors
+      pythonProcess.stderr.on("data", (data) => {
+        errorData += data.toString();
+      });
+
+      pythonProcess.on("error", (err) => {
+        console.error("Spawn Error Detail:", err);
+        reject(err);
+      });
+
+      pythonProcess.on("close", (code) => {
+        if (code !== 0) {
+          console.error(`Python Error: ${errorData}`);
+          return reject(new InternalServerErrorException("Agent failed to process resume"));
+        }
+        resolve(result);
+      });
+
+      // Send the data to Python as a JSON string
+      const inputData = JSON.stringify({ resume: resumeText, jd: jdText });
+      pythonProcess.stdin.write(inputData);
+      pythonProcess.stdin.end();
+    });
   }
 }

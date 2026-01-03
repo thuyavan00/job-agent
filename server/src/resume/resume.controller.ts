@@ -48,6 +48,15 @@ export class ResumeController {
     return this.service.renderDocument(email, body);
   }
 
+  @Post("tailor")
+  async tailor(@Body() body: { resume: string; jd: string }) {
+    const tailoredContent = await this.service.tailorResume(body.resume, body.jd);
+    return {
+      success: true,
+      data: tailoredContent,
+    };
+  }
+
   @Get("files")
   async listFiles(
     @Headers("x-user-email") email: string,
