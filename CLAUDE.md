@@ -81,6 +81,7 @@ uv run python main.py  # Run the LangGraph resume tailoring agent
 **Module Structure**:
 - `AppModule`: Root module with global config, TypeORM, and ServeStatic setup
 - `ResumeModule`: Handles resume generation and file operations
+- `JobsModule`: Aggregates job listings from external portals (no DB, live fetch)
 
 **Static File Serving**:
 - `/static/*` serves files from `server/generated/`
@@ -150,6 +151,37 @@ Each wizard step uses:
 - React Hook Form for form state
 - Zod schemas (in `client/src/schema/`) for validation
 - Schema DTOs mirrored in `server/src/resume/dto/profile.dto.ts` (class-validator)
+
+### AI Job Match Feature
+
+**Route**: `/ai-job-match` (frontend) → `GET /jobs` (backend)
+
+**Current state (MVP)**:
+- Job role hardcoded to `"Software Engineer"` — future: derive from user's default resume via AI analysis
+- No DB storage; jobs are fetched live on each page load from two free public APIs
+- Four sources aggregated in parallel with `Promise.allSettled` (graceful if any fail):
+  - **Remotive** (`remotive.com/api/remote-jobs?category=software-dev`) — remote-first tech jobs; free, no auth
+  - **Arbeitnow** (`arbeitnow.com/api/job-board-api`) — broad tech job board; free, no auth
+  - **Greenhouse** (`boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true`) — official per-company job board API; no global search, uses a curated list of companies (Stripe, Airbnb, Lyft, Coinbase, Discord, Notion, Brex, Gusto, Coda, Rippling); software roles filtered by title keyword match
+  - **Lever** (`api.lever.co/v0/postings/{slug}?mode=json`) — official per-company postings API; curated list (Airtable, Cloudflare, Linear, Retool, Loom, Reddit, Intercom); software roles filtered by title keyword match
+- Greenhouse and Lever fan-out to each company in parallel (inner `Promise.allSettled`), take up to 5 software roles per company
+- HTML descriptions are stripped with regex before returning to the client
+- Frontend shows skeleton cards during load, handles error + empty states
+
+**Backend files**:
+- `server/src/jobs/jobs.dto.ts` — `JobDto` interface
+- `server/src/jobs/jobs.service.ts` — live fetch + normalisation logic
+- `server/src/jobs/jobs.controller.ts` — `GET /jobs` endpoint
+- `server/src/jobs/jobs.module.ts` — NestJS module
+
+**Frontend files**:
+- `client/src/routes/JobMatch.tsx` — page with job card grid
+
+**Planned next steps**:
+- Use LLM to analyse the user's default resume and infer a better job role/keywords
+- Add filter bar (location, job type, remote/onsite)
+- Store/cache fetched jobs in PostgreSQL to reduce external API calls
+- Add "Save Job" / application tracking integration
 
 ## Important Notes
 

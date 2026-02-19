@@ -6,6 +6,7 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { AppController } from "@app/app.controller";
 import { AppService } from "@app/app.service";
 import { ResumeModule } from "@resume/resume.module";
+import { JobsModule } from "./jobs/jobs.module";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ResumeModule } from "@resume/resume.module";
       }),
     }),
     ResumeModule,
+    JobsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

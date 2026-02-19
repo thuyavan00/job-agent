@@ -11,6 +11,7 @@ import ResumeLayout from "@/routes/ResumeLayout";
 import Sidebar from "./components/Sidebar";
 
 import ResumeHome from "./routes/ResumeHome";
+import JobMatch from "./routes/JobMatch";
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
               <Route path="skills" element={<StepSkills />} />
               <Route path="review" element={<ReviewGenerate />} />
             </Route>
+            <Route path="/ai-job-match" element={<JobMatch />} />
             <Route
               path="/"
               element={<Navigate to="/resume-builder" replace />}
