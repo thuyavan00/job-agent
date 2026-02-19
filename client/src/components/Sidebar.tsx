@@ -1,6 +1,4 @@
-import { NavLink, useNavigate } from "react-router-dom";
-import ThemeToggle from "@/components/ThemeToggle";
-import { useAuth } from "@context/AuthContext";
+import { NavLink } from "react-router-dom";
 import {
   LayoutGrid,
   Sparkles,
@@ -14,7 +12,6 @@ import {
   MessageSquare,
   BarChart2,
   Puzzle,
-  LogOut,
 } from "lucide-react";
 
 const links = [
@@ -33,23 +30,9 @@ const links = [
 ];
 
 export default function Sidebar() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-
-  async function handleLogout() {
-    await logout();
-    navigate("/login", { replace: true });
-  }
-
   return (
-    <aside className="h-screen w-64 bg-bg border-r border-border flex flex-col">
-      {/* top brand */}
-      <div className="px-4 py-5 mb-2 border-b border-border">
-        <div className="text-lg font-bold text-text">JobAgent Pro</div>
-      </div>
-
-      {/* nav */}
-      <nav className="px-2 flex-1 overflow-y-auto">
+    <aside className="w-64 flex-shrink-0 h-full bg-bg border-r border-border overflow-y-auto">
+      <nav className="px-2 py-3">
         <div className="flex flex-col gap-0.5">
           {links.map(({ to, label, icon, end }) => (
             <NavLink
@@ -67,29 +50,6 @@ export default function Sidebar() {
           ))}
         </div>
       </nav>
-
-      {/* footer */}
-      <div className="px-3 py-3 border-t border-border">
-        <ThemeToggle />
-
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <div className="text-xs text-text-2 overflow-hidden text-ellipsis whitespace-nowrap flex-1">
-            {user?.email}
-            {user?.role === "admin" && (
-              <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-400">
-                admin
-              </span>
-            )}
-          </div>
-          <button
-            onClick={handleLogout}
-            className="flex-shrink-0 p-1.5 rounded-lg text-text-2 hover:text-text hover:bg-card transition-colors"
-            title="Sign out"
-          >
-            <LogOut size={15} />
-          </button>
-        </div>
-      </div>
     </aside>
   );
 }

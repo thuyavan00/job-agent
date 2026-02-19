@@ -9,19 +9,19 @@ import ReviewGenerate from "./steps/ReviewGenerate";
 import { FormProvider } from "./context/FormContext";
 import { AuthProvider } from "./context/AuthContext";
 import ResumeLayout from "@/routes/ResumeLayout";
-import Sidebar from "./components/Sidebar";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 import ResumeHome from "./routes/ResumeHome";
 import JobMatch from "./routes/JobMatch";
 import Dashboard from "./routes/Dashboard";
+import UserProfile from "./routes/UserProfile";
 import Login from "./routes/Login";
 import Register from "./routes/Register";
 
 function AppShell() {
   return (
     <FormProvider>
-      <Layout sidebar={<Sidebar />}>
+      <Layout>
         <Routes>
           <Route path="/resume-builder" element={<ResumeLayout />}>
             <Route index element={<ResumeHome />} />
@@ -34,6 +34,7 @@ function AppShell() {
           </Route>
           <Route path="/ai-job-match" element={<JobMatch />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/profile" element={<UserProfile />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Layout>

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Delete, Param, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Post, Patch, Delete, Param, UseGuards } from "@nestjs/common";
 import { ResumeService } from "@resume/resume.service";
 import { UpsertProfileDto } from "@resume/dto/profile.dto";
 import { join } from "path";
@@ -32,6 +32,11 @@ export class ResumeController {
   @Get("profile")
   get(@CurrentUser() user: User) {
     return this.service.getProfile(user.email);
+  }
+
+  @Patch("profile/basics")
+  updateBasics(@CurrentUser() user: User, @Body() body: any) {
+    return this.service.updateBasics(user.email, body);
   }
 
   @Get("templates")

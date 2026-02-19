@@ -28,6 +28,7 @@ export function Button({
   leftIcon,
   className = "",
   type = "button",
+  disabled = false,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -36,6 +37,7 @@ export function Button({
   leftIcon?: ReactNode;
   className?: string;
   type?: "button" | "submit";
+  disabled?: boolean;
 }) {
   const base = "px-4 py-2 rounded-lg text-sm";
   const styles =
@@ -43,7 +45,12 @@ export function Button({
       ? "bg-card hover:bg-border/40 text-text border border-border"
       : "border border-border text-text-2 hover:bg-card hover:text-text";
   return (
-    <button type={type} onClick={onClick} className={`${base} ${styles} ${className}`}>
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className={`${base} ${styles} ${className} disabled:opacity-50 disabled:cursor-not-allowed`}
+    >
       <span className="inline-flex items-center gap-2">
         {leftIcon}
         {children}

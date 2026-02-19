@@ -71,6 +71,13 @@ export class Profile {
   })
   skills!: { items: string[] };
 
+  // AI-detected career metadata (populated on each resume render)
+  @Column({ nullable: true, type: "varchar" })
+  detectedRole!: string | null;
+
+  @Column({ nullable: true, type: "float" })
+  yearsOfExperience!: number | null;
+
   // Relation
   @OneToOne(() => User, (u) => u.profile, { onDelete: "CASCADE" })
   @JoinColumn()
