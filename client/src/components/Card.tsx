@@ -10,10 +10,10 @@ export function Card({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-border bg-bg.card shadow-soft">
+    <section className="rounded-xl border border-border bg-card">
       <header className="px-5 pt-4">
-        <div className="text-base font-semibold">{title}</div>
-        {subtitle ? <div className="text-sm text-text-muted">{subtitle}</div> : null}
+        <div className="text-base font-semibold text-text">{title}</div>
+        {subtitle ? <div className="text-sm text-text-2">{subtitle}</div> : null}
       </header>
       <div className="p-5">{children}</div>
     </section>
@@ -40,8 +40,8 @@ export function Button({
   const base = "px-4 py-2 rounded-lg text-sm";
   const styles =
     variant === "solid"
-      ? "bg-white/10 hover:bg-white/15 text-white border border-white/10"
-      : "border border-bg-border text-text-secondary hover:bg-bg.hover";
+      ? "bg-card hover:bg-border/40 text-text border border-border"
+      : "border border-border text-text-2 hover:bg-card hover:text-text";
   return (
     <button type={type} onClick={onClick} className={`${base} ${styles} ${className}`}>
       <span className="inline-flex items-center gap-2">

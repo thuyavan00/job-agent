@@ -26,7 +26,13 @@
     "paths": {
       "@/*": ["src/*"],
       "@components/*": ["src/components/*"],
-      "@steps/*": ["src/steps/*"]
+      "@steps/*": ["src/steps/*"],
+      "@context/*": ["src/context/*"],
+      "@theme/*": ["src/theme/*"],
+      "@schema/*": ["src/schema/*"],
+      "@hooks/*": ["src/hooks/*"],
+      "@utils/*": ["src/utils/*"],
+      "@constants/*": ["src/constants/*"]
     }
   },
   "include": ["src"]

@@ -25,7 +25,7 @@ function Section({
           {files.map((f) => (
             <div key={f.fileName} className="flex items-center gap-3 py-3">
               <div className="flex-1">
-                <div className="font-medium text-white flex items-center gap-2">
+                <div className="font-medium text-text flex items-center gap-2">
                   {f.fileName}
                   {f.fileName === defaultName && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-[color:var(--color-accent)]/15 text-[color:var(--color-accent)]">
@@ -80,19 +80,13 @@ function Section({
 
 export default function ResumeHome() {
   const navigate = useNavigate();
-  const [email] = useState<string>(
-    () => localStorage.getItem("userEmail") || "kannanthuyavan@gmail.com",
-  );
   const [files, setFiles] = useState<FilesResponse>({ resumes: [], coverLetters: [] });
   const [loading, setLoading] = useState(false);
 
   async function load() {
     setLoading(true);
     try {
-      const { data } = await axios.get<FilesResponse>("/api/resume/files", {
-        headers: { "x-user-email": email },
-      });
-      // defensive: ensure arrays
+      const { data } = await axios.get<FilesResponse>("/api/resume/files");
       setFiles({ resumes: data?.resumes ?? [], coverLetters: data?.coverLetters ?? [] });
     } finally {
       setLoading(false);
@@ -109,16 +103,13 @@ export default function ResumeHome() {
   async function handleDelete(fileName: string) {
     if (!confirm(`Delete ${fileName}?`)) return;
     const prev = files;
-    // optimistic update: remove from either group
     setFiles({
       resumes: prev.resumes.filter((f) => f.fileName !== fileName),
       coverLetters: prev.coverLetters.filter((f) => f.fileName !== fileName),
     });
     try {
-      await axios.delete(`/api/resume/files/${encodeURIComponent(fileName)}`, {
-        headers: { "x-user-email": email },
-      });
-    } catch (e) {
+      await axios.delete(`/api/resume/files/${encodeURIComponent(fileName)}`);
+    } catch {
       alert("Delete failed, reloading.");
       await load();
     }

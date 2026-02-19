@@ -7,6 +7,9 @@ import { AppController } from "@app/app.controller";
 import { AppService } from "@app/app.service";
 import { ResumeModule } from "@resume/resume.module";
 import { JobsModule } from "./jobs/jobs.module";
+import { DashboardModule } from "./dashboard/dashboard.module";
+import { AuthModule } from "./auth/auth.module";
+import { AdminModule } from "./admin/admin.module";
 
 @Module({
   imports: [
@@ -34,8 +37,11 @@ import { JobsModule } from "./jobs/jobs.module";
         synchronize: true,
       }),
     }),
+    AuthModule,
     ResumeModule,
     JobsModule,
+    DashboardModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

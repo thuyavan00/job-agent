@@ -1,68 +1,61 @@
-import { Body, Controller, Get, Headers, Post, Delete, Param } from "@nestjs/common";
+import { Body, Controller, Get, Post, Delete, Param, UseGuards } from "@nestjs/common";
 import { ResumeService } from "@resume/resume.service";
 import { UpsertProfileDto } from "@resume/dto/profile.dto";
 import { join } from "path";
 import { promises as fs } from "fs";
 import { isResume, isCover } from "./file-util";
+import { JwtAuthGuard } from "@auth/guards/jwt-auth.guard";
+import { CurrentUser } from "@auth/decorators/current-user.decorator";
+import type { User } from "@resume/entities/user.entity";
 
-const userFrom = (headers: Record<string, string>) => headers["x-user-email"] || "demo@local";
 type FileDTO = {
   fileName: string;
-  url: string; // /static/<safeEmail>/<fileName>
+  url: string;
   size: number;
   mtimeMs: number;
-  ext: string; // pdf | docx
-  version?: number; // parsed from -v12345 (optional, for convenience)
+  ext: string;
+  version?: number;
 };
 
 @Controller("resume")
+@UseGuards(JwtAuthGuard)
 export class ResumeController {
   private genRoot = join(process.cwd(), "generated");
-  private staticRoot = "static"; // must match ServeStatic serveRoot
 
   constructor(private readonly service: ResumeService) {}
 
   @Post("profile")
-  upsert(@Headers() headers: any, @Body() dto: UpsertProfileDto) {
-    const email = userFrom(headers);
-    return this.service.upsertProfile(email, dto);
+  upsert(@CurrentUser() user: User, @Body() dto: UpsertProfileDto) {
+    return this.service.upsertProfile(user.email, dto);
   }
 
   @Get("profile")
-  get(@Headers() headers: any) {
-    return this.service.getProfile(userFrom(headers));
+  get(@CurrentUser() user: User) {
+    return this.service.getProfile(user.email);
   }
 
   @Get("templates")
   listTemplates() {
-    // Hardcode for MVP; later read directory
     return [{ id: "simple-ats", name: "Simple ATS (A4)" }];
   }
 
   @Post("render")
   render(
-    @Headers() headers: any,
+    @CurrentUser() user: User,
     @Body() body: { docType: "resume" | "cover_letter"; templateId: string; variables?: any },
   ) {
-    const email = userFrom(headers);
-    return this.service.renderDocument(email, body);
+    return this.service.renderDocument(user.email, body);
   }
 
   @Post("tailor")
   async tailor(@Body() body: { resume: string; jd: string }) {
     const tailoredContent = await this.service.tailorResume(body.resume, body.jd);
-    return {
-      success: true,
-      data: tailoredContent,
-    };
+    return { success: true, data: tailoredContent };
   }
 
   @Get("files")
-  async listFiles(
-    @Headers("x-user-email") email: string,
-  ): Promise<{ resumes: FileDTO[]; coverLetters: FileDTO[] }> {
-    if (!email) return { resumes: [], coverLetters: [] };
-
+  async listFiles(@CurrentUser() user: User): Promise<{ resumes: FileDTO[]; coverLetters: FileDTO[] }> {
+    const email = user.email;
     const dir = join(this.genRoot, email);
     const base = process.env.PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -77,7 +70,7 @@ export class ResumeController {
         const version = match ? Number(match[1]) : undefined;
         return {
           fileName: name,
-          url: `${base}/${"static"}/${email}/${encodeURIComponent(name)}`,
+          url: `${base}/static/${email}/${encodeURIComponent(name)}`,
           size: st.size,
           mtimeMs: st.mtimeMs,
           ext,
@@ -92,31 +85,24 @@ export class ResumeController {
     try {
       const names = await fs.readdir(dir);
       const items = (await Promise.all(names.map(statIfFile))).filter(Boolean) as FileDTO[];
-
-      const resumes = items
-        .filter((f) => isResume(f.fileName))
-        .sort((a, b) => b.mtimeMs - a.mtimeMs);
-      const coverLetters = items
-        .filter((f) => isCover(f.fileName))
-        .sort((a, b) => b.mtimeMs - a.mtimeMs);
-
-      return { resumes, coverLetters };
+      return {
+        resumes: items.filter((f) => isResume(f.fileName)).sort((a, b) => b.mtimeMs - a.mtimeMs),
+        coverLetters: items.filter((f) => isCover(f.fileName)).sort((a, b) => b.mtimeMs - a.mtimeMs),
+      };
     } catch (e: any) {
-      if (e.code === "ENOENT") return { resumes: [], coverLetters: [] }; // folder not created yet
+      if (e.code === "ENOENT") return { resumes: [], coverLetters: [] };
       throw e;
     }
   }
 
   @Delete("files/:fileName")
-  async deleteFile(@Headers("x-user-email") email: string, @Param("fileName") fileName: string) {
-    if (!email || !fileName) return { ok: false };
-
-    const full = join(this.genRoot, email, fileName);
+  async deleteFile(@CurrentUser() user: User, @Param("fileName") fileName: string) {
+    const full = join(this.genRoot, user.email, fileName);
     try {
       await fs.unlink(full);
       return { ok: true };
     } catch (e: any) {
-      if (e.code === "ENOENT") return { ok: true }; // already gone
+      if (e.code === "ENOENT") return { ok: true };
       throw e;
     }
   }

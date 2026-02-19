@@ -19,37 +19,30 @@ export default function ReviewGenerate() {
   async function handleGenerate() {
     setBusy(true);
     try {
-      const headers = { "x-user-email": data.basics.email };
+      await axios.post("/api/resume/profile", toUpsertPayload(data));
 
-      await axios.post("/api/resume/profile", toUpsertPayload(data), { headers });
-
-      const r = await axios.post(
-        "/api/resume/render",
-        { docType: "resume", templateId: "simple-ats" },
-        { headers },
-      );
+      const r = await axios.post("/api/resume/render", {
+        docType: "resume",
+        templateId: "simple-ats",
+      });
       setResume(r.data);
 
-      const c = await axios.post(
-        "/api/resume/render",
-        {
-          docType: "cover_letter",
-          templateId: "simple-ats",
-          variables: {
-            date: new Date().toDateString(),
-            company_name: "Acme Corp",
-            company_address: "",
-            hiring_manager_name: "Hiring Manager",
-            job_title: "Software Engineer",
-            top_skills: (data.skills.items || []).slice(0, 6).join(", "),
-            impact_sentence: "improved X by Y% and reduced Z cost",
-            prior_company: data.experience[0]?.company ?? "Previous Company",
-            prior_achievement: "built a scalable service",
-            team_name: "Platform",
-          },
+      const c = await axios.post("/api/resume/render", {
+        docType: "cover_letter",
+        templateId: "simple-ats",
+        variables: {
+          date: new Date().toDateString(),
+          company_name: "Acme Corp",
+          company_address: "",
+          hiring_manager_name: "Hiring Manager",
+          job_title: "Software Engineer",
+          top_skills: (data.skills.items || []).slice(0, 6).join(", "),
+          impact_sentence: "improved X by Y% and reduced Z cost",
+          prior_company: data.experience[0]?.company ?? "Previous Company",
+          prior_achievement: "built a scalable service",
+          team_name: "Platform",
         },
-        { headers },
-      );
+      });
       setCover(c.data.pdfUrl ?? null);
     } finally {
       setBusy(false);
@@ -60,7 +53,7 @@ export default function ReviewGenerate() {
     <div className="space-y-6">
       <Card title="Review" subtitle="Confirm your details, then generate your files">
         <div className="space-y-4">
-          <pre className="bg-[#0e141a] border border-bg-border rounded-lg p-4 overflow-auto max-h-[45vh] text-xs">
+          <pre className="bg-card border border-border rounded-lg p-4 overflow-auto max-h-[45vh] text-xs text-text">
             {JSON.stringify(data, null, 2)}
           </pre>
 

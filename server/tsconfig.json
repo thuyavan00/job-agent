@@ -16,7 +16,8 @@
     "baseUrl": "./",
     "paths": {
       "@app/*": ["src/*"],
-      "@resume/*": ["src/resume/*"]
+      "@resume/*": ["src/resume/*"],
+      "@auth/*": ["src/auth/*"]
     },
     "incremental": true,
     "skipLibCheck": true,
