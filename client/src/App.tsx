@@ -27,7 +27,10 @@ export default function App() {
               <Route path="skills" element={<StepSkills />} />
               <Route path="review" element={<ReviewGenerate />} />
             </Route>
-            <Route path="/" element={<Navigate to="/resume-builder" replace />} />
+            <Route
+              path="/"
+              element={<Navigate to="/resume-builder" replace />}
+            />
           </Routes>
         </Layout>
       </FormProvider>
