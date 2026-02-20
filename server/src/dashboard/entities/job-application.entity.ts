@@ -40,6 +40,10 @@ export class JobApplication {
   @Column({ nullable: true })
   sourceUrl: string;
 
+  /** Set when the application was created by an automated workflow run */
+  @Column({ nullable: true })
+  workflowRunId: string;
+
   @Column({ type: "timestamp", default: () => "CURRENT_TIMESTAMP" })
   appliedAt: Date;
 

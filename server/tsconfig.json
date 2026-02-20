@@ -17,7 +17,10 @@
     "paths": {
       "@app/*": ["src/*"],
       "@resume/*": ["src/resume/*"],
-      "@auth/*": ["src/auth/*"]
+      "@auth/*": ["src/auth/*"],
+      "@jobs/*": ["src/jobs/*"],
+      "@dashboard/*": ["src/dashboard/*"],
+      "@workflow/*": ["src/workflow/*"]
     },
     "incremental": true,
     "skipLibCheck": true,
