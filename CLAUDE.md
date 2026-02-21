@@ -288,10 +288,11 @@ uv run python enhance.py  # ATS enhancement agent — expects JSON profile via s
 | createdAt / updatedAt | timestamp | auto |
 
 **NodeSubtype values**:
-- Triggers (Job Portals): `linkedin_jobs`, `indeed_jobs`, `angellist_jobs`, `company_careers`
+- Triggers (Job Sources — match `JobDto.source` strings): `remotive_jobs`, `arbeitnow_jobs`, `greenhouse_jobs`, `lever_jobs`
 - Triggers (Schedule): `daily_trigger`, `weekly_trigger`
-- Conditions: `job_filter`, `salary_check`
-- Actions: `submit_application`, `tailor_resume`
+- Conditions: `job_filter`, `salary_check`, `location_check`
+- Actions (Applications): `submit_application`, `tailor_resume`, `save_job`, `generate_cover_letter`
+- Actions (Communication — UI only, no handler yet): `send_email`, `linkedin_message`, `slack_notification`
 
 #### WorkflowEdge (`server/src/workflow/entities/workflow-edge.entity.ts`)
 | Field | Type | Notes |
@@ -430,42 +431,67 @@ entities/
   workflow-run.entity.ts
   workflow-node-run.entity.ts
 orchestrator/
-  workflow-queue.types.ts              — Queue name, WorkflowJobName enum, retry config, payload/output types
-  workflow-orchestrator.service.ts     — startRun(): finds trigger nodes, creates WorkflowRun, enqueues first BullMQ jobs
-  workflow-execution.processor.ts      — BullMQ WorkerHost: dispatches to handler → advances graph → reconciles run status
+  interfaces/
+    node-handler.interface.ts          — BaseNodeHandler (abstract), NodeExecutionContext, NodeHandlerResult
+  decorators/
+    node-handler.decorator.ts          — @NodeHandler(...subtypes) via SetMetadata
+  graph/
+    topological-sort.ts                — Kahn's algorithm → { sorted[], cycleNodes[] }
+    graph-validator.ts                 — validates: has nodes, has trigger, no dangling edges, no cycles
+  registry/
+    handler-registry.ts                — NODE_HANDLER_MAP token; DiscoveryService factory scans BaseNodeHandler subclasses
+  workflow-queue.types.ts              — WORKFLOW_QUEUE, WorkflowJobPayload, output interfaces
+  workflow-orchestrator.service.ts     — startRun(): graph validation → find triggers → enqueue via NODE_HANDLER_MAP
+  workflow-execution.processor.ts      — BullMQ WorkerHost: registry dispatch, fan-in dedup, inline recursion
   handlers/
-    trigger-job-match.handler.ts       — Calls JobsService.fetchJobs(), filters by node config (keywords/location/remote)
-    ai-resume-tailor.handler.ts        — Fetches Profile from DB, formats as markdown, spawns uv run main.py
-    browser-apply.handler.ts           — Creates JobApplication(APPLIED) with workflowRunId; Puppeteer stub
+    trigger-job-match.handler.ts       — @NodeHandler(7 trigger subtypes); async; fetches + filters jobs
+    ai-resume-tailor.handler.ts        — @NodeHandler(TAILOR_RESUME); async; spawns uv run main.py
+    browser-apply.handler.ts           — @NodeHandler(SUBMIT_APPLICATION); async; accepts { job } OR { jobs[] }
+    job-filter.handler.ts              — @NodeHandler(JOB_FILTER); inline; remoteOnly + requiredKeywords + excludeCompanies
+    salary-check.handler.ts            — @NodeHandler(SALARY_CHECK); inline; filters by minSalary
+    location-check.handler.ts          — @NodeHandler(LOCATION_CHECK); inline; filters by acceptedLocations CSV
+    save-job.handler.ts                — @NodeHandler(SAVE_JOB); inline; creates JobApplication records for all jobs
 workflow.service.ts                    — Workflow/node/edge CRUD + atomic graph save (PUT /graph)
 workflow.controller.ts                 — REST endpoints; POST /:id/runs delegates to OrchestratorService
-workflow.module.ts                     — Registers BullMQ queue, all handlers, processor, and TypeORM entities
+workflow.module.ts                     — DiscoveryModule + all 7 handlers + handlerRegistryProvider
 workflow.dto.ts                        — DTOs: CreateWorkflowDto, SaveWorkflowGraphDto, NodeSnapshot, EdgeSnapshot, etc.
 ```
+
+**Strategy Pattern — how handlers self-register**:
+- Every handler extends `BaseNodeHandler`, carries `@NodeHandler(...subtypes)`, declares `get isInline(): boolean`
+- On startup, `handlerRegistryProvider` (factory via `DiscoveryService`) scans all providers, reads `@NodeHandler` metadata, builds `Map<NodeSubtype, BaseNodeHandler>`
+- To add a new handler: create class → extend BaseNodeHandler → add @NodeHandler → add to module providers. Nothing else changes.
 
 **Execution pipeline (data flow)**:
 ```
 POST /workflows/:id/runs
   └─ OrchestratorService.startRun()
-       └─ Finds trigger nodes (no incoming edges)
-       └─ Creates WorkflowRun + WorkflowNodeRun(PENDING)
-       └─ queue.add("TRIGGER_JOB_MATCH", payload, { attempts: 3 })
+       └─ validateWorkflowGraph() — Kahn's topo sort, checks triggers + no cycles
+       └─ Creates WorkflowRun + WorkflowNodeRun(PENDING) for each trigger node
+       └─ queue.add(subtype, payload, ASYNC_JOB_OPTIONS[subtype])
             ▼ BullMQ Worker
-       Processor → TriggerJobMatchHandler  → output: { jobs: JobDto[] }
-            └─ advances graph via edges → creates next NodeRun → enqueues "AI_RESUME_TAILOR"
-            ▼
-       Processor → AiResumeTailorHandler   → output: { tailoredResume, job }
-            └─ uv run main.py  (same spawn pattern as resume.service.ts)
-            └─ advances graph → creates next NodeRun → enqueues "BROWSER_APPLY"
-            ▼
-       Processor → BrowserApplyHandler     → output: { applicationId, success }
-            └─ Creates JobApplication(APPLIED) + sets workflowRunId
-            └─ reconcileRunStatus() → WorkflowRun.status = COMPLETED
+       Processor: handlerMap.get(subtype).execute(ctx) → output
+            └─ advanceGraph(): for each outgoing edge:
+                 · dedup guard: skip if NodeRun already exists (prevents fan-in double-fire)
+                 · fan-in guard: all predecessor NodeRuns must be COMPLETED
+                 · handler.isInline → execute synchronously + recurse
+                 · !handler.isInline → create NodeRun(PENDING) + queue.add(subtype, ...)
+            └─ reconcileRunStatus() → WorkflowRun → COMPLETED / FAILED
 ```
 
-**Condition nodes** (`job_filter`, `salary_check`) are evaluated **inline** by the processor (no BullMQ job) — they filter the `jobs` array and pass results to the next node.
+**Inline nodes** (no BullMQ job, execute synchronously inside `advanceGraph`):
+`job_filter`, `salary_check`, `location_check`, `save_job`
 
-**Retry isolation**: Each node is a separate BullMQ job. If `BROWSER_APPLY` fails and retries, only that step re-runs — the Python tailoring is not repeated.
+**Async nodes** (BullMQ job, retried independently):
+`new_job_posted` / portal triggers (3×), `tailor_resume` (2×), `submit_application` (5×)
+
+**Retry isolation**: Each node is a separate BullMQ job keyed by `NodeSubtype`. If `submit_application` fails and retries, only that step re-runs.
+
+**Verification script** (`server/scripts/test-workflow.ts`):
+- Tests TRIGGER → JOB_FILTER → SUBMIT_APPLICATION without DB or Redis
+- All deps mocked; run with:
+  `npx ts-node -r tsconfig-paths/register --project tsconfig.scripts.json scripts/test-workflow.ts`
+- Scenario A (jobs pass filter) + Scenario B (empty filter → SUBMIT skipped), 6 assertions total
 
 **Infrastructure**: `server/docker-compose.yml` runs Postgres 16 and Redis 7 (AOF persistence). Start with `docker compose up -d` from `server/`.
 
@@ -504,11 +530,20 @@ POST /workflows/:id/runs
 - Top navbar with user menu, avatar, admin badge, and logout
 - **Workflow Builder schema**: 5 TypeORM entities (Workflow, WorkflowNode, WorkflowEdge, WorkflowRun, WorkflowNodeRun)
 - **Workflow REST API**: full CRUD + atomic graph save + run trigger endpoint
-- **WorkflowOrchestrator**: BullMQ async pipeline with 3 node handlers (TRIGGER_JOB_MATCH, AI_RESUME_TAILOR, BROWSER_APPLY)
+- **WorkflowOrchestrator — Strategy Pattern refactor** (complete):
+  - `BaseNodeHandler` + `@NodeHandler` decorator + `NODE_HANDLER_MAP` (DiscoveryService auto-registration)
+  - Kahn's topological sort + `validateWorkflowGraph()` called before every run
+  - Fan-in dedup + predecessor-readiness guards in `advanceGraph()`
+  - Fixed `evalCondition` for array contains/not_contains
+  - 7 handlers: 3 async (trigger, tailor, apply) + 4 inline (job_filter, salary_check, location_check, save_job)
+  - `BrowserApplyHandler` accepts both `{ job }` (from tailor) and `{ jobs[] }` (direct from filter)
 - **Docker Compose** (`server/docker-compose.yml`): Postgres 16 + Redis 7 with persistent volumes
+- **Workflow Builder UI** (`client/src/routes/WorkflowBuilder.tsx`): React Flow canvas with drag-drop palette, node settings panel, save/test-run integration
+  - Job source trigger nodes: Remotive, Arbeitnow, Greenhouse, Lever (matching real `GET /jobs` sources)
+  - Condition nodes: Job Filter, Salary Check, Location Check (all inline, backend-wired)
+  - Action nodes: Submit Application, AI Tailor Resume, Save Job (backend-wired); Generate Cover Letter, Send Email, LinkedIn Message, Slack Notification (UI-only, no handlers yet)
 
 ### UI Placeholders (sidebar links, no backend yet)
-- Workflow Builder (backend done; React Flow frontend canvas not yet built)
 - Application Tracker, Interview Calendar
 - Network Intelligence, Salary Intelligence
 - Skill Development, Interview Prep AI

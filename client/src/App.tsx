@@ -15,6 +15,7 @@ import ResumeHome from "./routes/ResumeHome";
 import JobMatch from "./routes/JobMatch";
 import Dashboard from "./routes/Dashboard";
 import UserProfile from "./routes/UserProfile";
+import WorkflowBuilder from "./routes/WorkflowBuilder";
 import Login from "./routes/Login";
 import Register from "./routes/Register";
 
@@ -33,6 +34,7 @@ function AppShell() {
             <Route path="review" element={<ReviewGenerate />} />
           </Route>
           <Route path="/ai-job-match" element={<JobMatch />} />
+          <Route path="/workflow-builder" element={<WorkflowBuilder />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/profile" element={<UserProfile />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

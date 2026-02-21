@@ -1,37 +1,33 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { InjectQueue } from "@nestjs/bullmq";
 import { Repository } from "typeorm";
 import { Queue } from "bullmq";
 import { Workflow } from "../entities/workflow.entity";
-import { WorkflowNode, NodeSubtype } from "../entities/workflow-node.entity";
+import { WorkflowNode, NodeSubtype, NodeType } from "../entities/workflow-node.entity";
 import { WorkflowEdge } from "../entities/workflow-edge.entity";
 import { WorkflowRun, RunStatus, RunTrigger } from "../entities/workflow-run.entity";
 import { WorkflowNodeRun, NodeRunStatus } from "../entities/workflow-node-run.entity";
+import { BaseNodeHandler } from "./interfaces/node-handler.interface";
+import { NODE_HANDLER_MAP } from "./registry/handler-registry";
+import { validateWorkflowGraph } from "./graph/graph-validator";
 import {
   WORKFLOW_QUEUE,
-  WorkflowJobName,
   WorkflowJobPayload,
-  JOB_OPTIONS,
 } from "./workflow-queue.types";
 
-/** NodeSubtypes that are executed inline (no BullMQ job) */
-const INLINE_SUBTYPES = new Set<NodeSubtype>([NodeSubtype.JOB_FILTER, NodeSubtype.SALARY_CHECK]);
-
-/** Maps NodeSubtype → BullMQ job name */
-function subtypeToJobName(subtype: NodeSubtype): WorkflowJobName | null {
-  const map: Partial<Record<NodeSubtype, WorkflowJobName>> = {
-    [NodeSubtype.LINKEDIN_JOBS]:      WorkflowJobName.TRIGGER_JOB_MATCH,
-    [NodeSubtype.INDEED_JOBS]:        WorkflowJobName.TRIGGER_JOB_MATCH,
-    [NodeSubtype.ANGELLIST_JOBS]:     WorkflowJobName.TRIGGER_JOB_MATCH,
-    [NodeSubtype.COMPANY_CAREERS]:    WorkflowJobName.TRIGGER_JOB_MATCH,
-    [NodeSubtype.DAILY_TRIGGER]:      WorkflowJobName.TRIGGER_JOB_MATCH,
-    [NodeSubtype.WEEKLY_TRIGGER]:     WorkflowJobName.TRIGGER_JOB_MATCH,
-    [NodeSubtype.TAILOR_RESUME]:      WorkflowJobName.AI_RESUME_TAILOR,
-    [NodeSubtype.SUBMIT_APPLICATION]: WorkflowJobName.BROWSER_APPLY,
-  };
-  return map[subtype] ?? null;
-}
+/** Retry options keyed by NodeSubtype — mirrors ASYNC_JOB_OPTIONS in the processor */
+const ASYNC_JOB_OPTIONS: Partial<Record<NodeSubtype, { attempts: number; backoff: { type: string; delay: number } }>> = {
+  [NodeSubtype.NEW_JOB_POSTED]:     { attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+  [NodeSubtype.REMOTIVE_JOBS]:      { attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+  [NodeSubtype.ARBEITNOW_JOBS]:     { attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+  [NodeSubtype.GREENHOUSE_JOBS]:    { attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+  [NodeSubtype.LEVER_JOBS]:         { attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+  [NodeSubtype.DAILY_TRIGGER]:      { attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+  [NodeSubtype.WEEKLY_TRIGGER]:     { attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+  [NodeSubtype.TAILOR_RESUME]:      { attempts: 2, backoff: { type: "fixed", delay: 3_000 } },
+  [NodeSubtype.SUBMIT_APPLICATION]: { attempts: 5, backoff: { type: "exponential", delay: 10_000 } },
+};
 
 @Injectable()
 export class WorkflowOrchestratorService {
@@ -44,11 +40,12 @@ export class WorkflowOrchestratorService {
     @InjectRepository(WorkflowEdge)     private readonly edgeRepo: Repository<WorkflowEdge>,
     @InjectRepository(WorkflowRun)      private readonly runRepo: Repository<WorkflowRun>,
     @InjectRepository(WorkflowNodeRun)  private readonly nodeRunRepo: Repository<WorkflowNodeRun>,
+    @Inject(NODE_HANDLER_MAP) private readonly handlerMap: Map<NodeSubtype, BaseNodeHandler>,
   ) {}
 
   /**
-   * Creates a WorkflowRun, finds trigger nodes (nodes with no incoming edges),
-   * and enqueues each as the first BullMQ job in the pipeline.
+   * Validates the workflow graph, creates a WorkflowRun, finds trigger nodes
+   * (nodes with no incoming edges), and enqueues each as the first BullMQ job.
    */
   async startRun(
     workflowId: string,
@@ -56,14 +53,19 @@ export class WorkflowOrchestratorService {
     userEmail: string,
     triggeredBy: RunTrigger = RunTrigger.MANUAL,
   ): Promise<WorkflowRun> {
-    // ── Load & validate workflow ───────────────────────────────────────────
+    // ── Load workflow ──────────────────────────────────────────────────────
     const workflow = await this.workflowRepo.findOne({
       where: { id: workflowId, user: { id: userId } },
       relations: ["nodes", "edges", "edges.source", "edges.target"],
     });
     if (!workflow) throw new NotFoundException("Workflow not found");
-    if (workflow.nodes.length === 0) {
-      throw new Error("Workflow has no nodes — add at least one trigger node");
+
+    // ── Graph validation ───────────────────────────────────────────────────
+    const validation = validateWorkflowGraph(workflow.nodes, workflow.edges);
+    if (!validation.valid) {
+      throw new BadRequestException(
+        `Workflow graph is invalid: ${validation.errors.join("; ")}`,
+      );
     }
 
     // ── Create the run record ──────────────────────────────────────────────
@@ -80,27 +82,21 @@ export class WorkflowOrchestratorService {
     this.logger.log(`WorkflowRun ${run.id} started for workflow "${workflow.name}"`);
 
     // ── Identify trigger nodes (no incoming edges) ─────────────────────────
-    const nodesWithIncoming = new Set(workflow.edges.map((e) => e.target.id));
+    const nodesWithIncoming = new Set(workflow.edges.map((e) => (e.target as WorkflowNode).id));
     const triggerNodes = workflow.nodes.filter((n) => !nodesWithIncoming.has(n.id));
-
-    if (triggerNodes.length === 0) {
-      this.logger.warn("No trigger nodes found (all nodes have incoming edges) — run marked failed");
-      await this.runRepo.update(run.id, { status: RunStatus.FAILED });
-      throw new Error("No trigger node found in workflow");
-    }
 
     // ── Enqueue each trigger node ──────────────────────────────────────────
     for (const node of triggerNodes) {
       const subtype = node.subtype as NodeSubtype;
+      const handler = this.handlerMap.get(subtype);
 
-      if (INLINE_SUBTYPES.has(subtype)) {
-        this.logger.warn(`Trigger node ${node.id} has a condition subtype — skipping`);
+      if (!handler) {
+        this.logger.warn(`No handler for trigger subtype "${subtype}" — skipping`);
         continue;
       }
 
-      const jobName = subtypeToJobName(subtype);
-      if (!jobName) {
-        this.logger.warn(`No handler for trigger subtype "${subtype}" — skipping`);
+      if (handler.isInline) {
+        this.logger.warn(`Trigger node ${node.id} has an inline subtype "${subtype}" — skipping (triggers must be async)`);
         continue;
       }
 
@@ -124,13 +120,14 @@ export class WorkflowOrchestratorService {
         userEmail,
       };
 
-      await this.queue.add(jobName, payload, {
-        ...JOB_OPTIONS[jobName],
+      const jobOptions = ASYNC_JOB_OPTIONS[subtype] ?? { attempts: 1, backoff: { type: "fixed", delay: 1_000 } };
+      await this.queue.add(subtype, payload, {
+        ...jobOptions,
         // Stable job ID prevents duplicate enqueues if the endpoint is called twice
         jobId: `${run.id}:${node.id}`,
       });
 
-      this.logger.log(`Enqueued ${jobName} for trigger node ${node.id}`);
+      this.logger.log(`Enqueued ${subtype} for trigger node ${node.id}`);
     }
 
     return run;

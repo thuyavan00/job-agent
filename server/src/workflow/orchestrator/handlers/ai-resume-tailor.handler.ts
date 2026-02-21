@@ -6,22 +6,33 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import { Profile } from "@resume/entities/profile.entity";
 import { JobDto } from "@jobs/jobs.dto";
-import { WorkflowJobPayload, TriggerOutput, TailorOutput } from "../workflow-queue.types";
+import { NodeSubtype } from "../../entities/workflow-node.entity";
+import { NodeHandler } from "../decorators/node-handler.decorator";
+import { BaseNodeHandler, NodeExecutionContext, NodeHandlerResult } from "../interfaces/node-handler.interface";
+import type { TriggerOutput, TailorOutput } from "../workflow-queue.types";
 
 interface TailorConfig {
   resumeProfileId?: string;
 }
 
+@NodeHandler(NodeSubtype.TAILOR_RESUME)
 @Injectable()
-export class AiResumeTailorHandler {
+export class AiResumeTailorHandler extends BaseNodeHandler {
   private readonly logger = new Logger(AiResumeTailorHandler.name);
+
+  get isInline(): boolean {
+    return false;
+  }
 
   constructor(
     @InjectRepository(Profile)
     private readonly profileRepo: Repository<Profile>,
-  ) {}
+  ) {
+    super();
+  }
 
-  async handle(payload: WorkflowJobPayload): Promise<TailorOutput> {
+  async execute(ctx: NodeExecutionContext): Promise<NodeHandlerResult> {
+    const { payload } = ctx;
     const config = payload.config as TailorConfig;
     const input = payload.input as Partial<TriggerOutput>;
 
@@ -63,7 +74,8 @@ export class AiResumeTailorHandler {
 
     const tailoredResume = await this.spawnTailorAgent(profileText, jdText);
 
-    return { tailoredResume, job: targetJob };
+    const output: TailorOutput = { tailoredResume, job: targetJob };
+    return { output: output as unknown as Record<string, unknown> };
   }
 
   // ── Python bridge — mirrors resume.service.ts tailorResume() ───────────────

@@ -1,24 +1,34 @@
 import { Processor, WorkerHost, InjectQueue } from "@nestjs/bullmq";
-import { Logger } from "@nestjs/common";
+import { Inject, Logger } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { Job, Queue } from "bullmq";
 import { WorkflowEdge } from "../entities/workflow-edge.entity";
+import { WorkflowNode, NodeSubtype } from "../entities/workflow-node.entity";
 import { WorkflowRun, RunStatus } from "../entities/workflow-run.entity";
 import { WorkflowNodeRun, NodeRunStatus } from "../entities/workflow-node-run.entity";
-import { NodeSubtype } from "../entities/workflow-node.entity";
-import { TriggerJobMatchHandler } from "./handlers/trigger-job-match.handler";
-import { AiResumeTailorHandler } from "./handlers/ai-resume-tailor.handler";
-import { BrowserApplyHandler } from "./handlers/browser-apply.handler";
+import { BaseNodeHandler, NodeExecutionContext } from "./interfaces/node-handler.interface";
+import { NODE_HANDLER_MAP } from "./registry/handler-registry";
 import {
   WORKFLOW_QUEUE,
-  WorkflowJobName,
   WorkflowJobPayload,
-  JOB_OPTIONS,
 } from "./workflow-queue.types";
 import type { EdgeCondition } from "../entities/workflow-edge.entity";
 
-/** Inline condition evaluator for JOB_FILTER / SALARY_CHECK nodes */
+/** Retry options keyed by NodeSubtype (async handlers only) */
+const ASYNC_JOB_OPTIONS: Partial<Record<NodeSubtype, { attempts: number; backoff: { type: string; delay: number } }>> = {
+  [NodeSubtype.NEW_JOB_POSTED]:     { attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+  [NodeSubtype.REMOTIVE_JOBS]:      { attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+  [NodeSubtype.ARBEITNOW_JOBS]:     { attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+  [NodeSubtype.GREENHOUSE_JOBS]:    { attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+  [NodeSubtype.LEVER_JOBS]:         { attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+  [NodeSubtype.DAILY_TRIGGER]:      { attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+  [NodeSubtype.WEEKLY_TRIGGER]:     { attempts: 3, backoff: { type: "exponential", delay: 5_000 } },
+  [NodeSubtype.TAILOR_RESUME]:      { attempts: 2, backoff: { type: "fixed", delay: 3_000 } },
+  [NodeSubtype.SUBMIT_APPLICATION]: { attempts: 5, backoff: { type: "exponential", delay: 10_000 } },
+};
+
+/** Inline condition evaluator for edge conditions */
 function evalCondition(condition: EdgeCondition, output: Record<string, unknown>): boolean {
   const val = (output as any)[condition.field];
   switch (condition.operator) {
@@ -26,26 +36,14 @@ function evalCondition(condition: EdgeCondition, output: Record<string, unknown>
     case "lt":          return Number(val) < Number(condition.value);
     case "eq":          return val === condition.value;
     case "neq":         return val !== condition.value;
-    case "contains":    return String(val).includes(String(condition.value));
-    case "not_contains": return !String(val).includes(String(condition.value));
+    case "contains":
+      if (Array.isArray(val)) return val.includes(condition.value);
+      return String(val).includes(String(condition.value));
+    case "not_contains":
+      if (Array.isArray(val)) return !val.includes(condition.value);
+      return !String(val).includes(String(condition.value));
     default:            return true;
   }
-}
-
-/** Maps NodeSubtype → the BullMQ job name to use */
-function subtypeToJobName(subtype: NodeSubtype): WorkflowJobName | null {
-  const map: Partial<Record<NodeSubtype, WorkflowJobName>> = {
-    [NodeSubtype.LINKEDIN_JOBS]:       WorkflowJobName.TRIGGER_JOB_MATCH,
-    [NodeSubtype.INDEED_JOBS]:         WorkflowJobName.TRIGGER_JOB_MATCH,
-    [NodeSubtype.ANGELLIST_JOBS]:      WorkflowJobName.TRIGGER_JOB_MATCH,
-    [NodeSubtype.COMPANY_CAREERS]:     WorkflowJobName.TRIGGER_JOB_MATCH,
-    [NodeSubtype.DAILY_TRIGGER]:       WorkflowJobName.TRIGGER_JOB_MATCH,
-    [NodeSubtype.WEEKLY_TRIGGER]:      WorkflowJobName.TRIGGER_JOB_MATCH,
-    [NodeSubtype.TAILOR_RESUME]:       WorkflowJobName.AI_RESUME_TAILOR,
-    [NodeSubtype.SUBMIT_APPLICATION]:  WorkflowJobName.BROWSER_APPLY,
-    // JOB_FILTER and SALARY_CHECK are handled inline (no dedicated BullMQ job name)
-  };
-  return map[subtype] ?? null;
 }
 
 @Processor(WORKFLOW_QUEUE)
@@ -54,12 +52,10 @@ export class WorkflowExecutionProcessor extends WorkerHost {
 
   constructor(
     @InjectQueue(WORKFLOW_QUEUE) private readonly queue: Queue<WorkflowJobPayload>,
-    @InjectRepository(WorkflowEdge)   private readonly edgeRepo: Repository<WorkflowEdge>,
-    @InjectRepository(WorkflowRun)    private readonly runRepo: Repository<WorkflowRun>,
+    @InjectRepository(WorkflowEdge)    private readonly edgeRepo: Repository<WorkflowEdge>,
+    @InjectRepository(WorkflowRun)     private readonly runRepo: Repository<WorkflowRun>,
     @InjectRepository(WorkflowNodeRun) private readonly nodeRunRepo: Repository<WorkflowNodeRun>,
-    private readonly triggerHandler: TriggerJobMatchHandler,
-    private readonly tailorHandler: AiResumeTailorHandler,
-    private readonly applyHandler: BrowserApplyHandler,
+    @Inject(NODE_HANDLER_MAP) private readonly handlerMap: Map<NodeSubtype, BaseNodeHandler>,
   ) {
     super();
   }
@@ -68,9 +64,10 @@ export class WorkflowExecutionProcessor extends WorkerHost {
 
   async process(job: Job<WorkflowJobPayload>): Promise<void> {
     const payload = job.data;
-    this.logger.log(`Processing job ${job.name} — nodeRunId: ${payload.nodeRunId}`);
+    const subtype = payload.subtype as NodeSubtype;
+    this.logger.log(`Processing job ${job.name} (${subtype}) — nodeRunId: ${payload.nodeRunId}`);
 
-    // Mark as running
+    // Mark node as running
     await this.nodeRunRepo.update(payload.nodeRunId, {
       status: NodeRunStatus.RUNNING,
       startedAt: new Date(),
@@ -78,7 +75,13 @@ export class WorkflowExecutionProcessor extends WorkerHost {
 
     let output: Record<string, unknown>;
     try {
-      output = await this.dispatchToHandler(job.name as WorkflowJobName, payload);
+      const handler = this.handlerMap.get(subtype);
+      if (!handler) {
+        throw new Error(`No handler registered for subtype "${subtype}"`);
+      }
+      const ctx: NodeExecutionContext = { payload };
+      const result = await handler.execute(ctx);
+      output = result.output;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`Job ${job.name} failed: ${message}`);
@@ -107,31 +110,12 @@ export class WorkflowExecutionProcessor extends WorkerHost {
     await this.reconcileRunStatus(payload.workflowRunId);
   }
 
-  // ── Route job name → handler ────────────────────────────────────────────────
-
-  private async dispatchToHandler(
-    jobName: WorkflowJobName,
-    payload: WorkflowJobPayload,
-  ): Promise<Record<string, unknown>> {
-    switch (jobName) {
-      case WorkflowJobName.TRIGGER_JOB_MATCH:
-        return this.triggerHandler.handle(payload) as unknown as Promise<Record<string, unknown>>;
-      case WorkflowJobName.AI_RESUME_TAILOR:
-        return this.tailorHandler.handle(payload) as unknown as Promise<Record<string, unknown>>;
-      case WorkflowJobName.BROWSER_APPLY:
-        return this.applyHandler.handle(payload) as unknown as Promise<Record<string, unknown>>;
-      default:
-        throw new Error(`Unknown job name: ${jobName}`);
-    }
-  }
-
-  // ── Graph traversal: create + enqueue next node jobs ──────────────────────
+  // ── Graph traversal: fan-in-aware, dedup-guarded ───────────────────────────
 
   private async advanceGraph(
     payload: WorkflowJobPayload,
     nodeOutput: Record<string, unknown>,
   ): Promise<void> {
-    // Load outgoing edges for this node (with target node data)
     const outgoingEdges = await this.edgeRepo.find({
       where: { source: { id: payload.nodeId } },
       relations: ["target"],
@@ -143,42 +127,98 @@ export class WorkflowExecutionProcessor extends WorkerHost {
     }
 
     for (const edge of outgoingEdges) {
-      // Evaluate conditional edges (JOB_FILTER / SALARY_CHECK branches)
+      // Evaluate conditional edges
       if (edge.condition && !evalCondition(edge.condition, nodeOutput)) {
         this.logger.log(`Edge condition not met — skipping branch to node ${edge.target.id}`);
         continue;
       }
 
-      const nextNode = edge.target;
+      const nextNode = edge.target as WorkflowNode;
       const nextSubtype = nextNode.subtype as NodeSubtype;
 
-      // ── Inline condition nodes: filter & pass through, no BullMQ job ──────
-      if (nextSubtype === NodeSubtype.JOB_FILTER || nextSubtype === NodeSubtype.SALARY_CHECK) {
-        const filteredOutput = this.applyNodeFilter(nextNode.config as any, nextSubtype, nodeOutput);
+      // ── Fan-in dedup guard: skip if a NodeRun already exists for this node+run ──
+      const existingRun = await this.nodeRunRepo.findOne({
+        where: {
+          workflowRun: { id: payload.workflowRunId },
+          node: { id: nextNode.id },
+        },
+      });
+      if (existingRun) {
+        this.logger.debug(
+          `NodeRun already exists for node ${nextNode.id} in run ${payload.workflowRunId} — skipping duplicate`
+        );
+        continue;
+      }
+
+      // ── Fan-in readiness guard: all predecessor NodeRuns must be complete ──
+      const allPredecessorsDone = await this.checkPredecessorsDone(
+        nextNode.id,
+        payload.workflowRunId,
+        payload.nodeId,
+      );
+      if (!allPredecessorsDone) {
+        this.logger.debug(
+          `Predecessors of node ${nextNode.id} not all done yet — waiting for fan-in`
+        );
+        continue;
+      }
+
+      const handler = this.handlerMap.get(nextSubtype);
+
+      // ── Inline handlers: execute synchronously, recurse ───────────────────
+      if (handler?.isInline) {
+        const ctx: NodeExecutionContext = {
+          payload: {
+            ...payload,
+            nodeId: nextNode.id,
+            subtype: nextSubtype,
+            config: nextNode.config ?? {},
+            input: nodeOutput,
+          },
+        };
+
+        let inlineOutput: Record<string, unknown>;
+        try {
+          const result = await handler.execute(ctx);
+          inlineOutput = result.output;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const condNodeRun = this.nodeRunRepo.create({
+            workflowRun: { id: payload.workflowRunId },
+            node: { id: nextNode.id },
+            status: NodeRunStatus.FAILED,
+            input: nodeOutput,
+            error: message,
+            startedAt: new Date(),
+            completedAt: new Date(),
+          });
+          await this.nodeRunRepo.save(condNodeRun);
+          this.logger.error(`Inline handler for ${nextSubtype} failed: ${message}`);
+          continue;
+        }
 
         const condNodeRun = this.nodeRunRepo.create({
           workflowRun: { id: payload.workflowRunId },
           node: { id: nextNode.id },
           status: NodeRunStatus.COMPLETED,
           input: nodeOutput,
-          output: filteredOutput,
+          output: inlineOutput,
           startedAt: new Date(),
           completedAt: new Date(),
         });
         const savedCondRun = await this.nodeRunRepo.save(condNodeRun);
 
-        // Recurse: advance from this condition node
+        // Recurse: advance from this inline node
         await this.advanceGraph(
           { ...payload, nodeId: nextNode.id, nodeRunId: savedCondRun.id },
-          filteredOutput,
+          inlineOutput,
         );
         continue;
       }
 
-      // ── Async nodes: enqueue as BullMQ job ─────────────────────────────────
-      const jobName = subtypeToJobName(nextSubtype);
-      if (!jobName) {
-        this.logger.warn(`No handler mapped for subtype "${nextSubtype}" — skipping`);
+      // ── Async handlers: enqueue as BullMQ job ─────────────────────────────
+      if (!handler) {
+        this.logger.warn(`No handler registered for subtype "${nextSubtype}" — skipping`);
         continue;
       }
 
@@ -201,43 +241,46 @@ export class WorkflowExecutionProcessor extends WorkerHost {
         userEmail: payload.userEmail,
       };
 
-      await this.queue.add(jobName, nextPayload, JOB_OPTIONS[jobName]);
-      this.logger.log(`Enqueued ${jobName} for node ${nextNode.id} (nodeRun ${savedNextRun.id})`);
+      const jobOptions = ASYNC_JOB_OPTIONS[nextSubtype] ?? { attempts: 1, backoff: { type: "fixed", delay: 1_000 } };
+      await this.queue.add(nextSubtype, nextPayload, jobOptions);
+      this.logger.log(`Enqueued ${nextSubtype} for node ${nextNode.id} (nodeRun ${savedNextRun.id})`);
     }
   }
 
-  // ── Inline filter logic for condition nodes ─────────────────────────────────
+  /**
+   * Checks that all predecessor nodes (incoming edges) for `nodeId` have a completed NodeRun,
+   * excluding `currentNodeId` (which just finished, triggering this check).
+   */
+  private async checkPredecessorsDone(
+    nodeId: string,
+    workflowRunId: string,
+    currentNodeId: string,
+  ): Promise<boolean> {
+    const incomingEdges = await this.edgeRepo.find({
+      where: { target: { id: nodeId } },
+      relations: ["source"],
+    });
 
-  private applyNodeFilter(
-    config: Record<string, any>,
-    subtype: NodeSubtype,
-    input: Record<string, unknown>,
-  ): Record<string, unknown> {
-    const jobs = (input as any).jobs ?? [];
+    // Only check predecessors other than the current completing node
+    const otherPredecessorIds = incomingEdges
+      .map((e) => (e.source as WorkflowNode).id)
+      .filter((id) => id !== currentNodeId);
 
-    if (subtype === NodeSubtype.JOB_FILTER) {
-      const { minSalary, maxSalary, requiredKeywords = [], excludeCompanies = [], remoteOnly } = config;
-      const filtered = jobs.filter((j: any) => {
-        if (remoteOnly && !j.location.toLowerCase().includes("remote")) return false;
-        if (excludeCompanies.some((c: string) => j.company.toLowerCase().includes(c.toLowerCase()))) return false;
-        if (requiredKeywords.length && !requiredKeywords.some((kw: string) => j.title.toLowerCase().includes(kw.toLowerCase()))) return false;
-        return true;
+    if (otherPredecessorIds.length === 0) return true;
+
+    for (const predId of otherPredecessorIds) {
+      const predRun = await this.nodeRunRepo.findOne({
+        where: {
+          workflowRun: { id: workflowRunId },
+          node: { id: predId },
+        },
       });
-      return { ...input, jobs: filtered };
+      if (!predRun || predRun.status !== NodeRunStatus.COMPLETED) {
+        return false;
+      }
     }
 
-    if (subtype === NodeSubtype.SALARY_CHECK) {
-      // Salary data is often missing from public APIs — pass through if unparseable
-      const { minSalary = 0 } = config;
-      const filtered = jobs.filter((j: any) => {
-        const salaryMatch = String(j.salary ?? "").match(/\d+/);
-        if (!salaryMatch) return true; // no salary listed → don't filter out
-        return Number(salaryMatch[0]) >= Number(minSalary);
-      });
-      return { ...input, jobs: filtered };
-    }
-
-    return input;
+    return true;
   }
 
   // ── Mark the WorkflowRun COMPLETED when all node runs are done ─────────────
@@ -261,7 +304,7 @@ export class WorkflowExecutionProcessor extends WorkerHost {
 
     await this.runRepo.update(workflowRunId, {
       status: finalStatus,
-      completedAt: anyPending ? undefined : new Date(),
+      completedAt: new Date(),
     });
 
     this.logger.log(`WorkflowRun ${workflowRunId} → ${finalStatus}`);
