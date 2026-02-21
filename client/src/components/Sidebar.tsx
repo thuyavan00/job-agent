@@ -1,36 +1,47 @@
 import { NavLink } from "react-router-dom";
-import ThemeToggle from "@/components/ThemeToggle";
-import { LayoutGrid, FileText, Workflow, ListChecks, Calendar, Cog } from "lucide-react";
+import {
+  LayoutGrid,
+  Sparkles,
+  FileText,
+  Workflow,
+  ListChecks,
+  Calendar,
+  Network,
+  DollarSign,
+  BookOpen,
+  MessageSquare,
+  BarChart2,
+  Puzzle,
+} from "lucide-react";
 
 const links = [
-  { to: "/", label: "Dashboard", icon: <LayoutGrid size={18} /> },
-  { to: "/ai-job-match", label: "AI Job Match", icon: <FileText size={18} /> },
-  { to: "/resume-builder", label: "Resume Builder", icon: <FileText size={18} /> },
-  { to: "/workflow-builder", label: "Workflow Builder", icon: <Workflow size={18} /> },
-  { to: "/application-tracker", label: "Application Tracker", icon: <ListChecks size={18} /> },
-  { to: "/interview-calendar", label: "Interview Calendar", icon: <Calendar size={18} /> },
-  { to: "/settings", label: "Settings", icon: <Cog size={18} /> },
+  { to: "/dashboard", label: "Dashboard", icon: <LayoutGrid size={18} />, end: true },
+  { to: "/ai-job-match", label: "AI Job Match", icon: <Sparkles size={18} />, end: false },
+  { to: "/resume-builder", label: "Resume Builder", icon: <FileText size={18} />, end: false },
+  { to: "/workflow-builder", label: "Workflow Builder", icon: <Workflow size={18} />, end: false },
+  { to: "/application-tracker", label: "Application Tracker", icon: <ListChecks size={18} />, end: false },
+  { to: "/interview-calendar", label: "Interview Calendar", icon: <Calendar size={18} />, end: false },
+  { to: "/network-intelligence", label: "Network Intelligence", icon: <Network size={18} />, end: false },
+  { to: "/salary-intelligence", label: "Salary Intelligence", icon: <DollarSign size={18} />, end: false },
+  { to: "/skill-development", label: "Skill Development", icon: <BookOpen size={18} />, end: false },
+  { to: "/interview-prep", label: "Interview Prep AI", icon: <MessageSquare size={18} />, end: false },
+  { to: "/career-analytics", label: "Career Analytics", icon: <BarChart2 size={18} />, end: false },
+  { to: "/browser-extension", label: "Browser Extension", icon: <Puzzle size={18} />, end: false },
 ];
 
-export default function Sidebar({ userEmail = "john@example.com" }: { userEmail?: string }) {
+export default function Sidebar() {
   return (
-    <aside className="h-screen w-64 bg-bg border-r border-border flex flex-col">
-      {/* top brand */}
-      <div className="px-4 py-5 mb-5 border-b border-border">
-        <div className="text-lg font-bold text-white">JobAgent Pro</div>
-      </div>
-
-      {/* nav */}
-      <nav className="px-2 flex-1 overflow-y-auto">
-        <div className="flex flex-col gap-1">
-          {links.map(({ to, label, icon }) => (
+    <aside className="w-64 flex-shrink-0 h-full bg-bg border-r border-border overflow-y-auto">
+      <nav className="px-2 py-3">
+        <div className="flex flex-col gap-0.5">
+          {links.map(({ to, label, icon, end }) => (
             <NavLink
               key={to}
               to={to}
-              end={to === "/"}
+              end={end}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm no-underline
-                 ${isActive ? "bg-card text-white" : "text-text-2 hover:bg-card hover:text-text"}`
+                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm no-underline transition-colors
+                 ${isActive ? "bg-card text-text" : "text-text-2 hover:bg-card hover:text-text"}`
               }
             >
               {icon}
@@ -39,17 +50,6 @@ export default function Sidebar({ userEmail = "john@example.com" }: { userEmail?
           ))}
         </div>
       </nav>
-
-      {/* footer pinned at bottom */}
-      <div className="px-3 py-3 border-t border-border">
-        {/* theme toggle */}
-        <ThemeToggle />
-
-        {/* email line */}
-        <div className="mt-3 text-xs text-text-2 w-full overflow-hidden text-ellipsis whitespace-nowrap">
-          {userEmail}
-        </div>
-      </div>
     </aside>
   );
 }

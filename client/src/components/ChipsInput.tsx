@@ -34,12 +34,12 @@ export function ChipsInput({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={placeholder}
-          className="flex-1 bg-[#0e141a] border border-bg-border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-white/10"
+          className="flex-1 bg-input-bg text-text border border-input-border rounded-lg px-3 py-2 text-sm outline-none placeholder-text-2 focus:ring-2 focus:ring-input-focus"
         />
         <button
           type="button"
           onClick={add}
-          className="px-3 py-2 rounded-lg border border-bg-border bg-bg.hover text-sm text-text-secondary hover:bg-white/5"
+          className="px-3 py-2 rounded-lg border border-border bg-card text-sm text-text-2 hover:bg-border/30 hover:text-text transition-colors"
         >
           {addLabel}
         </button>
@@ -49,10 +49,10 @@ export function ChipsInput({
         {value.map((chip, i) => (
           <span
             key={`${chip}-${i}`}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#0e141a] border border-bg-border text-xs text-text-secondary"
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-card border border-border text-xs text-text-2"
           >
             {chip}
-            <button onClick={() => remove(i)} className="hover:text-white">
+            <button onClick={() => remove(i)} className="hover:text-text transition-colors">
               <X size={14} />
             </button>
           </span>

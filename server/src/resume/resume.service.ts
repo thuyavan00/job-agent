@@ -157,8 +157,85 @@ export class ResumeService {
     await fsys.writeFile(outPath, buffer);
   }
 
+  async enhanceProfile(profile: any): Promise<{
+    profile: any;
+    detectedRole: string | null;
+    yearsOfExperience: number | null;
+  }> {
+    const fallback = { profile, detectedRole: null, yearsOfExperience: null };
+
+    const pythonProjectDir = process.env.AGENT_PATH;
+    if (!pythonProjectDir || !fs.existsSync(pythonProjectDir)) {
+      console.warn("enhanceProfile: AGENT_PATH not set or missing — skipping AI enhancement");
+      return fallback;
+    }
+    const scriptPath = path.join(pythonProjectDir, "enhance.py");
+    if (!fs.existsSync(scriptPath)) {
+      console.warn("enhanceProfile: enhance.py not found — skipping AI enhancement");
+      return fallback;
+    }
+
+    return new Promise((resolve) => {
+      const proc = spawn("/usr/bin/uv", ["run", "enhance.py"], {
+        cwd: pythonProjectDir,
+        shell: true,
+        env: { ...process.env, PATH: process.env.PATH },
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      proc.stdout.on("data", (d) => { stdout += d.toString(); });
+      proc.stderr.on("data", (d) => { stderr += d.toString(); });
+
+      proc.on("error", (err) => {
+        console.error("enhanceProfile spawn error:", err);
+        resolve(fallback);
+      });
+
+      proc.on("close", (code) => {
+        if (code !== 0) {
+          console.error(`enhanceProfile agent exited ${code}: ${stderr}`);
+          return resolve(fallback);
+        }
+        try {
+          const output = JSON.parse(stdout.trim());
+          const enhancedProfile = output.profile;
+          if (enhancedProfile && typeof enhancedProfile === "object" && enhancedProfile.basics) {
+            return resolve({
+              profile: enhancedProfile,
+              detectedRole: output.detected_role || null,
+              yearsOfExperience: output.years_of_experience != null ? Number(output.years_of_experience) : null,
+            });
+          }
+        } catch {
+          console.error("enhanceProfile: failed to parse agent output");
+        }
+        resolve(fallback);
+      });
+
+      proc.stdin.write(JSON.stringify({ profile }));
+      proc.stdin.end();
+    });
+  }
+
+  async updateProfileMeta(email: string, detectedRole: string | null, yearsOfExperience: number | null) {
+    const user = await this.users.findOne({ where: { email }, relations: ["profile"] });
+    if (user?.profile) {
+      await this.profiles.update(user.profile.id, { detectedRole, yearsOfExperience });
+    }
+  }
+
+  async updateBasics(email: string, basics: Partial<Profile["basics"]>): Promise<Profile> {
+    const user = await this.users.findOne({ where: { email }, relations: ["profile"] });
+    if (!user?.profile) throw new NotFoundException("Profile not found");
+    const merged = { ...user.profile.basics, ...basics };
+    await this.profiles.update(user.profile.id, { basics: merged });
+    return this.getProfile(email);
+  }
+
   async renderDocument(email: string, input: RenderInput) {
-    const profile = await this.getProfile(email);
+    let profile = await this.getProfile(email);
     const outDir = path.join(process.cwd(), "generated", email.replace(/[^a-zA-Z0-9@.]/g, "_"));
     await fsys.mkdir(outDir, { recursive: true });
     const base = process.env.PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -167,6 +244,15 @@ export class ResumeService {
     const version = Date.now();
 
     if (input.docType === "resume") {
+      // AI-enhance the profile and extract career metadata
+      const enhanced = await this.enhanceProfile(profile);
+      profile = enhanced.profile;
+
+      // Persist detected role + years of experience back to the DB profile
+      if (enhanced.detectedRole || enhanced.yearsOfExperience != null) {
+        await this.updateProfileMeta(email, enhanced.detectedRole, enhanced.yearsOfExperience);
+      }
+
       // HTML -> PDF
       const html = await this.renderHTML(input.templateId, "resume", { profile });
       const pdfPath = path.join(outDir, `resume-${input.templateId}-v${version}.pdf`);

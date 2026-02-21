@@ -16,7 +16,11 @@
     "baseUrl": "./",
     "paths": {
       "@app/*": ["src/*"],
-      "@resume/*": ["src/resume/*"]
+      "@resume/*": ["src/resume/*"],
+      "@auth/*": ["src/auth/*"],
+      "@jobs/*": ["src/jobs/*"],
+      "@dashboard/*": ["src/dashboard/*"],
+      "@workflow/*": ["src/workflow/*"]
     },
     "incremental": true,
     "skipLibCheck": true,
