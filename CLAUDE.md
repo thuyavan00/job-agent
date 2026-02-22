@@ -57,7 +57,10 @@ uv run python enhance.py  # ATS enhancement agent — expects JSON profile via s
   - `/build`: `StepBasics` (personal info)
   - `/education`, `/experience`, `/projects`, `/skills`: Wizard steps
   - `/review`: `ReviewGenerate` (final review + PDF/DOCX generation)
-- UI-only placeholder routes (sidebar links, no backend): `/workflow-builder`, `/application-tracker`, `/interview-calendar`, `/network-intelligence`, `/salary-intelligence`, `/skill-development`, `/interview-prep`, `/career-analytics`, `/browser-extension`
+- `/workflow-builder` → Workflow Builder canvas (React Flow, fully implemented)
+- `/application-tracker` → Application Tracker with full CRUD (fully implemented)
+- `/interview-calendar` → Interview Calendar with month grid + add interview modal (fully implemented)
+- UI-only placeholder routes (sidebar links, no backend): `/network-intelligence`, `/salary-intelligence`, `/skill-development`, `/interview-prep`, `/career-analytics`, `/browser-extension`
 
 **State Management**:
 - `AuthContext` — auth state (user, login, register, logout, isLoading); rehydrates via `GET /api/auth/me` on mount
@@ -118,13 +121,15 @@ uv run python enhance.py  # ATS enhancement agent — expects JSON profile via s
 
 **Framework**: NestJS 11 with Express adapter
 
-**Entry Point**: `server/src/main.ts` — enables CORS (credentials: true), cookie-parser, listens on port 3000
+**Entry Point**: `server/src/main.ts` — enables CORS (credentials: true), cookie-parser, global `ValidationPipe({ transform: true, whitelist: false })`, listens on port 3000
 
 **Module Structure**:
 - `AppModule` — Root module; configures TypeORM (PostgreSQL), BullMQ (Redis), ServeStatic, and imports all feature modules
 - `AuthModule` — JWT auth with httpOnly cookie, bcrypt hashing, RBAC guards
 - `ResumeModule` — Profile CRUD, PDF/DOCX generation, LangGraph agent integration
-- `DashboardModule` — KPI aggregation, job application and interview CRUD
+- `DashboardModule` — KPI aggregation only (stats, chart, seed); entities still live in `dashboard/entities/` for workflow compatibility
+- `ApplicationsModule` — Job application CRUD (`/applications`); registers `JobApplication` entity
+- `InterviewsModule` — Interview CRUD with date-range filtering (`/interviews`); registers `Interview` entity
 - `AdminModule` — Admin-only user management and data seeding
 - `JobsModule` — Live job aggregation from 4 external APIs (exports `JobsService`)
 - `WorkflowModule` — Workflow Builder: entity CRUD, graph save, BullMQ orchestration
@@ -180,13 +185,20 @@ uv run python enhance.py  # ATS enhancement agent — expects JSON profile via s
 - `DELETE /resume/files/:fileName` — Delete file
 
 #### Dashboard (`/dashboard`) [all protected]
-- `GET /dashboard` — Stats, 6-month chart, recent applications, upcoming interviews
-- `GET /dashboard/applications` — List all applications; optional `?search=&status=` query params
-- `POST /dashboard/applications` — Create job application
-- `PATCH /dashboard/applications/:id` — Update application fields
-- `DELETE /dashboard/applications/:id` — Delete application (204)
-- `POST /dashboard/interviews` — Create interview
+- `GET /dashboard` — Stats, 6-month chart, recent applications (5), upcoming interviews (5)
 - `POST /dashboard/seed` [admin only] — Seed sample applications and interviews
+
+#### Applications (`/applications`) [all protected]
+- `GET /applications` — List all applications; optional `?search=&status=` query params
+- `POST /applications` — Create job application
+- `PATCH /applications/:id` — Update application fields
+- `DELETE /applications/:id` — Delete application (204)
+
+#### Interviews (`/interviews`) [all protected]
+- `GET /interviews` — List all interviews; optional `?from=&to=` ISO date query params
+- `POST /interviews` — Create interview
+- `PATCH /interviews/:id` — Update interview fields
+- `DELETE /interviews/:id` — Delete interview (204)
 
 #### Jobs (`/jobs`) [protected]
 - `GET /jobs` — Aggregated jobs from Remotive, Arbeitnow, Greenhouse, Lever
@@ -552,13 +564,20 @@ POST /workflows/:id/runs
   - Type-based border colors: cyan=trigger, yellow=condition, blue=action; themed canvas background via `--color-canvas-bg` CSS variable
 - **Application Tracker** (`client/src/routes/ApplicationTracker.tsx`): Full CRUD page for managing job applications
   - Stats bar: Total, Applied, Screening, Interviews, Offers, Rejected (computed from fetched data)
-  - Search by company/position + filter by status dropdown (`GET /dashboard/applications?search=&status=`)
+  - Search by company/position + filter by status dropdown (`GET /applications?search=&status=`)
   - Table: Company & Position (location + salary), color-coded Status badge (icons per status), Applied Date, Next Action + datetime, Source pill, Actions
   - Add Application modal + Edit Application modal (pre-populated) + View Details modal
   - Status badges: Applied (clock/blue), Screening (phone/orange), Interview (video/purple), Offer (check/green), Rejected/Withdrawn (x/red or gray)
+- **Interview Calendar** (`client/src/routes/InterviewCalendar.tsx`): Monthly calendar view of interviews
+  - Bookmarkable URL state: `?year=&month=&day=` via `useSearchParams` (month is 1-indexed)
+  - Stats bar: Upcoming, Prep Pending, Prepping, Ready
+  - Calendar grid: 6×7 cells via `buildMonthGrid` utility; interview chips per day; selected day detail panel
+  - Add Interview modal with Zod v4 validation form; prep status selection
+  - Data from `GET /api/dashboard` (upcomingInterviews, max 5); re-fetches after create
+  - Date utilities: `client/src/utils/calendarUtils.ts` (pure date arithmetic, no external date library)
+  - Backend wired to `GET /interviews`, `POST /interviews`, `PATCH /interviews/:id`, `DELETE /interviews/:id`
 
 ### UI Placeholders (sidebar links, no backend yet)
-- Interview Calendar
 - Network Intelligence, Salary Intelligence
 - Skill Development, Interview Prep AI
 - Career Analytics, Browser Extension
@@ -583,7 +602,7 @@ POST /workflows/:id/runs
 - **Monorepo structure**: No shared packages; each service is fully independent
 - **Python agents**: Spawned as child processes using `uv run python <script>` with `shell: true`
 - **CORS**: Backend allows `http://localhost:5173` with credentials
-- **Backend path aliases** (`server/tsconfig.json`): `@app/*`, `@resume/*`, `@auth/*`, `@jobs/*`, `@dashboard/*`, `@workflow/*`
+- **Backend path aliases** (`server/tsconfig.json`): `@app/*`, `@resume/*`, `@auth/*`, `@jobs/*`, `@dashboard/*`, `@workflow/*`, `@applications/*`, `@interviews/*`
 - **Infrastructure**: `cd server && docker compose up -d` starts Postgres + Redis
 - **Environment variables** (`server/.env`):
   - `DATABASE_URL` — PostgreSQL connection string (default: `postgres://postgres:postgres@localhost:5432/resume_db`)

@@ -1,185 +1,316 @@
 # JobAgent Pro
 
-A job automation platform with:
-
-- **Resume & Cover Letter Builder** (ATS-friendly)
-- **Workflow Builder** (future)
-- **Application Tracker**
-- **Interview Calendar**
-- AI-powered modules (planned)
-
-This README covers the **Resume Builder** feature implemented so far.
+A full-stack job automation platform that streamlines the job search process through AI-powered resume generation, automated workflow execution, application tracking, and interview management.
 
 ---
 
-## ✨ Features Implemented
+## Overview
 
-### 🔹 Resume & Cover Letter Builder
+JobAgent Pro is a monorepo comprising three independent services:
 
-- Step-by-step wizard (Personal Info → Education → Work Experience → Projects → Skills).
-- ATS-friendly resume and cover letter templates generated from user input.
-- Output stored as **PDF** and **DOCX** under `generated/`:
-  - Resumes → `resume-simple-ats-v<TIMESTAMP>.pdf/.docx`
-  - Cover Letters → `cover-simple-ats-v<TIMESTAMP>.pdf/.docx`
-- Files served statically under `/static/...` and listed separately on the Resume Builder dashboard.
-- **Default file** is always the latest (sorted by modified time).
-- Files can be **viewed, downloaded, or deleted** from the frontend.
-- New resume wizard starts with **StepBasics** after clicking _Create New Resume_.
-
-### 🔹 Frontend (React + Vite + Tailwind v4)
-
-- **Sidebar navigation** with active highlighting.
-- **Theme toggle (dark/light)** using a global `ThemeProvider`.
-- Sidebar footer includes:
-  - Theme toggle
-  - User email (truncated with ellipsis if too long).
-- **Resume Builder landing page** shows:
-  - Resumes list
-  - Cover letters list
-  - “Create New Resume” button
-- **Wizard navigation**:
-  - StepperHeader with icons + progress bar
-  - `Next` (form submit + navigate forward)
-  - `Previous` (navigate back)
-- Styling:
-  - Dark mode by default
-  - Form fields with custom background colors
-  - Components centered & spaced for readability
-
-### 🔹 Backend (NestJS + Express)
-
-- **Static file serving**:
-  - `/static/*` serves files from `generated/`.
-  - Emails are slugified (`kannanthuyavan@gmail.com` → `kannanthuyavan-gmail-com`) for safe folder names.
-- **ResumeController**:
-  - `GET /resume/files` → lists grouped `{ resumes, coverLetters }`
-  - `DELETE /resume/files/:fileName` → deletes a file for the current user
-  - Both expect `x-user-email` header
-- **Generation service**:
-  - Writes resume + cover letter files into `generated/<safeEmail>/`
-  - Filenames include timestamp version (cache busting)
+- **Frontend** — React 19 + Vite SPA with a multi-step resume wizard, dashboard, workflow builder, application tracker, and interview calendar
+- **Backend** — NestJS REST API with JWT authentication, RBAC, resume generation, job aggregation, and a BullMQ-backed workflow execution engine
+- **LangGraph Agent** — Python agents for ATS resume enhancement and job-description-tailored resume rewriting using LangChain and LangGraph
 
 ---
 
-## 🛠️ Tech Stack
+## Features
+
+### Resume Builder
+- Five-step guided wizard: Personal Info, Education, Work Experience, Projects, Skills
+- AI-powered ATS enhancement via LangGraph (`enhance.py`): rewrites bullets with action verbs, enforces character limits, extracts detected role and years of experience
+- Resume tailoring to a specific job description via LangGraph (`main.py`): iterative fact-checked rewriting, no fabrication
+- Simultaneous PDF (Puppeteer + Handlebars) and DOCX generation
+- Generated files served statically under `/static/<user-slug>/`; listed and deletable from the UI
+
+### Dashboard
+- KPI cards: applications sent, interviews scheduled, response rate, success rate (all with 30/60-day change indicators)
+- Six-month area chart (Recharts) of applications vs. interviews per month
+- Recent five applications and upcoming five interviews
+
+### AI Job Match
+- Aggregates live job postings from four external sources: Remotive, Arbeitnow, Greenhouse (10 curated companies), Lever (7 curated companies)
+- Filter by location, job type, and source
+- Graceful degradation via `Promise.allSettled`; descriptions stripped of HTML and truncated
+
+### Application Tracker
+- Full CRUD for job applications with extended fields: location, salary, source, source URL, next action, next action date
+- Status workflow: applied, screening, interview, offer, rejected, withdrawn
+- Search by company or position; filter by status
+- Stats bar computed client-side from fetched data
+
+### Interview Calendar
+- Monthly grid calendar (6x7) with per-day interview chips
+- Bookmarkable URL state via `?year=&month=&day=` query params
+- Stats bar: upcoming, prep pending, prepping, ready
+- Add interview form with Zod v4 validation; prep status selection
+- Selected day detail panel with inline prep-status management
+
+### Workflow Builder
+- React Flow canvas with drag-and-drop node palette
+- Trigger nodes (job sources), condition nodes (job filter, salary check, location check), action nodes (submit application, AI tailor resume, save job)
+- Atomic graph save; run trigger with live BullMQ execution
+- Strategy Pattern handler registry: add a new handler by creating a class, extending `BaseNodeHandler`, and adding `@NodeHandler`; nothing else changes
+- Kahn's topological sort and cycle detection before every run
+- Fan-in dedup and predecessor-readiness guards prevent duplicate node execution
+
+### Authentication and Authorization
+- JWT stored in httpOnly cookie (`access_token`); 7-day expiry
+- Session rehydration via `GET /auth/me` on page load
+- RBAC: `user` and `admin` roles; `@Roles()` decorator + `RolesGuard`
+- bcrypt password hashing (10 rounds)
+
+---
+
+## Tech Stack
 
 ### Frontend
-
-- [React](https://react.dev/) (Vite bundler)
-- [TailwindCSS v4](https://tailwindcss.com/)
-- [lucide-react](https://lucide.dev/) icons
-- React Router v6
-- Axios for API calls
+| Technology | Version | Purpose |
+|---|---|---|
+| React | 19.1.1 | UI framework |
+| React Router | 7.8.2 | Client-side routing |
+| TailwindCSS | 4.1.12 | Styling with dark/light theme via `data-theme` |
+| React Hook Form | 7.62.0 | Form state management |
+| Zod | 4.1.0 | Schema validation |
+| Recharts | 3.7.0 | Dashboard area chart |
+| React Flow | — | Workflow Builder canvas |
+| Axios | 1.11.0 | HTTP client (`withCredentials: true`) |
+| Lucide React | 0.541.0 | Icon library |
 
 ### Backend
+| Technology | Version | Purpose |
+|---|---|---|
+| NestJS | 11.0.1 | API framework (Express adapter) |
+| TypeORM | 0.3.26 | ORM with PostgreSQL |
+| BullMQ | 5.69.3 | Async workflow job queue (Redis-backed) |
+| Passport JWT | 4.0.1 | JWT authentication |
+| Puppeteer | 24.17.0 | PDF generation |
+| docx | 9.5.1 | DOCX generation |
+| Handlebars | 4.7.8 | Resume HTML templating |
 
-- [NestJS](https://nestjs.com/) (Express adapter)
-- `ServeStaticModule` for serving `/static`
-- File I/O with Node `fs/promises`
+### LangGraph Agent
+| Technology | Purpose |
+|---|---|
+| LangGraph | Orchestration of multi-node AI workflows |
+| LangChain OpenAI | GPT-4o-mini for resume enhancement and tailoring |
+| uv | Python dependency management |
+
+### Infrastructure
+| Technology | Purpose |
+|---|---|
+| PostgreSQL 16 | Primary database (JSONB for profile sections) |
+| Redis 7 | BullMQ job queue backend |
+| Docker Compose | Local Postgres + Redis with persistent volumes |
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
-### 1. Clone & Install
+### Prerequisites
 
-```bash
-git clone <repo-url>
-cd job-agent
-npm install
-```
+- Node.js 20+
+- Python 3.12 with `uv` installed
+- Docker (for Postgres and Redis)
+- OpenAI API key
 
-### 2. Run Backend
+### 1. Start infrastructure
 
 ```bash
 cd server
-npm run start:dev
+docker compose up -d
 ```
 
-Backend runs at [http://localhost:3000](http://localhost:3000).
+This starts Postgres 16 on port 5432 and Redis 7 on port 6379 with persistent volumes.
 
-### 3. Run Frontend
+### 2. Configure environment variables
+
+Create `server/.env`:
+
+```env
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/resume_db
+JWT_SECRET=your-secret-here
+REDIS_HOST=localhost
+REDIS_PORT=6379
+AGENT_PATH=/absolute/path/to/resume-agent
+```
+
+Create `resume-agent/.env`:
+
+```env
+OPENAI_API_KEY=your-openai-key-here
+```
+
+### 3. Install dependencies
 
 ```bash
-cd client
-npm run dev
+# Backend
+cd server && npm install
+
+# Frontend
+cd client && npm install
+
+# Python agent
+cd resume-agent && uv sync
 ```
 
-Frontend runs at [http://localhost:5173](http://localhost:5173).
+### 4. Run the services
 
-### 4. Proxy Setup (Vite → Nest)
+```bash
+# Backend (hot-reload)
+cd server && npm run start:dev
 
-`vite.config.ts` includes:
-
-```ts
-server: {
-  proxy: {
-    "/api": { target: "http://localhost:3000", changeOrigin: true },
-    "/static": { target: "http://localhost:3000", changeOrigin: true },
-  },
-}
+# Frontend (dev server)
+cd client && npm run dev
 ```
+
+Backend: `http://localhost:3000`
+Frontend: `http://localhost:5173`
+
+Vite proxies `/api/*` and `/static/*` to the backend, rewriting the `/api` prefix.
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 job-agent/
+├── client/                        # React + Vite frontend
+│   └── src/
+│       ├── routes/                # Page components
+│       │   ├── Dashboard.tsx
+│       │   ├── ApplicationTracker.tsx
+│       │   ├── InterviewCalendar.tsx
+│       │   ├── WorkflowBuilder.tsx
+│       │   ├── JobMatch.tsx
+│       │   ├── UserProfile.tsx
+│       │   └── resume/            # Wizard steps
+│       ├── components/            # Shared UI components
+│       ├── context/               # AuthContext, FormContext
+│       └── utils/                 # calendarUtils, etc.
 │
-├── server/                     # NestJS backend
+├── server/                        # NestJS backend
 │   ├── src/
-│   │   ├── resume/
-│   │   │   ├── resume.controller.ts
-│   │   │   └── file-util.ts
-│   │   └── main.ts
-│   ├── generated/              # generated files (per user folder)
-│   └── ...
+│   │   ├── auth/                  # JWT auth, guards, strategies
+│   │   ├── resume/                # Profile CRUD, file generation, entities
+│   │   ├── dashboard/             # KPI aggregation, entities (JobApplication, Interview)
+│   │   ├── applications/          # Application CRUD (/applications)
+│   │   ├── interviews/            # Interview CRUD (/interviews)
+│   │   ├── jobs/                  # External job aggregation
+│   │   ├── admin/                 # Admin user management
+│   │   └── workflow/              # Workflow engine, handlers, entities
+│   ├── generated/                 # Output directory for PDF/DOCX files
+│   └── docker-compose.yml
 │
-├── client/                     # React + Vite frontend
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── Sidebar.tsx
-│   │   │   ├── ThemeToggle.tsx
-│   │   │   ├── StepperHeader.tsx
-│   │   │   └── Card.tsx
-│   │   ├── theme/
-│   │   │   └── ThemeProvider.tsx
-│   │   ├── routes/
-│   │   │   ├── ResumeLayout.tsx
-│   │   │   ├── ResumeHome.tsx
-│   │   │   ├── StepBasics.tsx
-│   │   │   ├── StepEducation.tsx
-│   │   │   ├── StepExperience.tsx
-│   │   │   ├── StepProjects.tsx
-│   │   │   └── StepSkills.tsx
-│   │   └── constants/
-│   │       └── steps.ts
-│   └── ...
+└── resume-agent/                  # Python LangGraph agents
+    ├── enhance.py                 # ATS enhancement + role/exp extraction
+    └── main.py                    # Resume tailoring to job description
 ```
 
 ---
 
-## 🔮 Next Steps
+## API Reference
 
-- [ ] Workflow Builder (connect job portals, Gmail, LinkedIn)
-- [ ] Application Tracker UI + interview rounds
-- [ ] Calendar integration (Google/Outlook)
-- [ ] AI-powered Resume optimization
-- [ ] User authentication & profiles
+### Auth (`/auth`)
+| Method | Path | Description |
+|---|---|---|
+| POST | `/auth/register` | Register; sets httpOnly `access_token` cookie |
+| POST | `/auth/login` | Login; sets httpOnly `access_token` cookie |
+| POST | `/auth/logout` | Clears cookie |
+| GET | `/auth/me` | Returns current user (protected) |
+
+### Resume (`/resume`) — all protected
+| Method | Path | Description |
+|---|---|---|
+| POST | `/resume/profile` | Upsert full profile |
+| GET | `/resume/profile` | Fetch profile |
+| PATCH | `/resume/profile/basics` | Update basics section only |
+| POST | `/resume/render` | Generate PDF + DOCX (spawns `enhance.py`) |
+| POST | `/resume/tailor` | Tailor resume to JD (spawns `main.py`) |
+| GET | `/resume/files` | List generated files grouped by type |
+| DELETE | `/resume/files/:fileName` | Delete a file |
+
+### Dashboard (`/dashboard`) — all protected
+| Method | Path | Description |
+|---|---|---|
+| GET | `/dashboard` | Stats, chart, recent applications, upcoming interviews |
+| POST | `/dashboard/seed` | Seed sample data (admin only) |
+
+### Applications (`/applications`) — all protected
+| Method | Path | Description |
+|---|---|---|
+| GET | `/applications` | List applications; `?search=&status=` |
+| POST | `/applications` | Create application |
+| PATCH | `/applications/:id` | Update application |
+| DELETE | `/applications/:id` | Delete application (204) |
+
+### Interviews (`/interviews`) — all protected
+| Method | Path | Description |
+|---|---|---|
+| GET | `/interviews` | List interviews; `?from=&to=` (ISO dates) |
+| POST | `/interviews` | Create interview |
+| PATCH | `/interviews/:id` | Update interview |
+| DELETE | `/interviews/:id` | Delete interview (204) |
+
+### Jobs (`/jobs`) — protected
+| Method | Path | Description |
+|---|---|---|
+| GET | `/jobs` | Aggregated jobs from all four sources |
+
+### Workflows (`/workflows`) — all protected
+| Method | Path | Description |
+|---|---|---|
+| GET | `/workflows` | List user workflows |
+| POST | `/workflows` | Create workflow |
+| GET | `/workflows/:id` | Get workflow with nodes and edges |
+| PATCH | `/workflows/:id` | Update name or mode |
+| DELETE | `/workflows/:id` | Delete workflow |
+| PUT | `/workflows/:id/graph` | Atomic save of React Flow canvas |
+| PATCH | `/workflows/:id/activate` | Set status to active |
+| PATCH | `/workflows/:id/pause` | Set status to paused |
+| POST | `/workflows/:id/runs` | Trigger a run |
+| GET | `/workflows/:id/runs` | List run history |
+| GET | `/workflows/:id/runs/:runId` | Get single run detail |
 
 ---
 
-## 🧑‍💻 Dev Notes
+## Development Commands
 
-- **Cache busting**: PDFs/DOCXs are versioned with `-v<TIMESTAMP>` → no stale cache.
-- **Slugify emails**: ensures safe folder names on Windows.
-- **Default file** = latest by `mtimeMs` in each group.
-- **Theme switching**: Only **dark** / **light** supported, using `data-theme` attr + TailwindCSS variables.
-- **Navigation**: Stepper auto-advances and backtracks using `resumeSteps` array.
+### Backend
+```bash
+npm run start:dev   # Hot-reload dev server
+npm run build       # Production build
+npm run lint        # ESLint with auto-fix
+npm run test        # Jest unit tests
+npm run test:e2e    # End-to-end tests
+npm run test:cov    # Coverage report
+```
+
+### Frontend
+```bash
+npm run dev         # Dev server on http://localhost:5173
+npm run build       # Type-check + production build
+npm run lint        # ESLint
+npm run preview     # Preview production build
+```
+
+### LangGraph Agent
+```bash
+uv run python enhance.py   # ATS enhancement (stdin: profile JSON)
+uv run python main.py      # Resume tailoring (stdin: {resume, jd} JSON)
+```
 
 ---
 
-## 📜 License
+## Notes
+
+- **TypeORM synchronize**: schema auto-syncs on startup; disable this in production
+- **Static files**: served without auth checks via `/static/<user-slug>/<filename>`
+- **ValidationPipe**: global pipe configured with `whitelist: false` — DTOs use no class-validator decorators
+- **Workflow entities**: `JobApplication` and `Interview` entities remain under `dashboard/entities/` to preserve workflow module import paths; both `ApplicationsModule` and `DashboardModule` register them independently via `TypeOrmModule.forFeature()`
+- **Python agents**: spawned as child processes using `uv run python <script>` with `shell: true`; input via stdin, output captured from stdout
+
+---
+
+## License
 
 MIT

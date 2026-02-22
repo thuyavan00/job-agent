@@ -19,6 +19,7 @@ Thumbs.db
 .env.*
 __pycache__/
 .venv/
+.mcp.json
 
 # Build output
 dist/
