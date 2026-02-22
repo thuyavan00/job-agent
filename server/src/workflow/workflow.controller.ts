@@ -89,7 +89,7 @@ export class WorkflowController {
       id,
       user.id,
       user.email,
-      dto.triggeredBy ?? RunTrigger.MANUAL,
+      dto?.triggeredBy ?? RunTrigger.MANUAL,
     );
   }
 

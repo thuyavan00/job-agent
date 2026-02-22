@@ -87,6 +87,9 @@ interface WorkflowMeta {
 /* ─── Job portal options for "New Job Posted" dropdown ────────────────────── */
 
 const JOB_PORTALS = [
+  { value: "linkedin",   label: "LinkedIn",   description: "Professional network job board" },
+  { value: "indeed",     label: "Indeed",     description: "Largest job search engine" },
+  { value: "angellist",  label: "AngelList",  description: "Startup and tech jobs" },
   { value: "remotive",   label: "Remotive",   description: "Remote-first tech jobs" },
   { value: "arbeitnow",  label: "Arbeitnow",  description: "Broad tech job board" },
   { value: "greenhouse", label: "Greenhouse", description: "Stripe, Airbnb, Coinbase, Discord…" },
@@ -112,9 +115,30 @@ const PALETTE_SECTIONS: PaletteSection[] = [
     title: "Job Portals",
     items: [
       {
-        subtype: "new_job_posted",
-        label: "New Job Posted",
-        description: "Triggers when a new job matching your criteria is posted",
+        subtype: "linkedin_jobs",
+        label: "LinkedIn Jobs",
+        description: "Monitor LinkedIn for new job postings",
+        nodeType: "trigger",
+        subtitle: "Job Portals",
+      },
+      {
+        subtype: "indeed_jobs",
+        label: "Indeed Jobs",
+        description: "Monitor Indeed for new job postings",
+        nodeType: "trigger",
+        subtitle: "Job Portals",
+      },
+      {
+        subtype: "angellist_jobs",
+        label: "AngelList Jobs",
+        description: "Monitor AngelList for startup opportunities",
+        nodeType: "trigger",
+        subtitle: "Job Portals",
+      },
+      {
+        subtype: "company_careers",
+        label: "Company Careers",
+        description: "Monitor specific company career pages",
         nodeType: "trigger",
         subtitle: "Job Portals",
       },
@@ -265,6 +289,10 @@ const ALL_ITEMS = PALETTE_SECTIONS.flatMap((s) => s.items);
 function getNodeIcon(subtype: string, size = 16): React.ReactNode {
   const map: Record<string, React.ReactNode> = {
     new_job_posted:  <Search size={size} />,
+    linkedin_jobs:   <Globe size={size} />,
+    indeed_jobs:     <Search size={size} />,
+    angellist_jobs:  <Zap size={size} />,
+    company_careers: <Briefcase size={size} />,
     remotive_jobs:   <Globe size={size} />,
     arbeitnow_jobs:  <Search size={size} />,
     greenhouse_jobs: <Briefcase size={size} />,
@@ -325,16 +353,18 @@ function WorkflowNodeCard({ id, data, selected }: NodeProps<WFNode>) {
 
   const isConfigured = data.setupStatus === "configured";
 
+  const borderClass = {
+    trigger:   selected ? "border-cyan-500 ring-1 ring-cyan-500/25"   : "border-cyan-500/40",
+    condition: selected ? "border-yellow-500 ring-1 ring-yellow-500/25" : "border-yellow-500/40",
+    action:    selected ? "border-blue-500 ring-1 ring-blue-500/25"   : "border-blue-500/40",
+  }[data.nodeType];
+
   return (
-    <div
-      className={`bg-card border rounded-xl p-4 w-72 shadow-lg transition-all ${
-        selected ? "border-accent ring-1 ring-accent/30" : "border-border"
-      }`}
-    >
+    <div className={`bg-card border rounded-xl p-4 w-72 shadow-lg transition-all ${borderClass}`}>
       <Handle
         type="target"
         position={Position.Top}
-        className="!w-3 !h-3 !bg-border !border-2 !border-card"
+        className="!w-4 !h-4 !bg-border !border-2 !border-card"
       />
 
       <div className="flex items-start justify-between mb-3">
@@ -355,7 +385,6 @@ function WorkflowNodeCard({ id, data, selected }: NodeProps<WFNode>) {
           <button
             className="p-1.5 rounded hover:bg-surface-hover text-text-2 hover:text-text transition-colors"
             title="Configure"
-            onClick={(e) => e.stopPropagation()}
           >
             <Settings size={13} />
           </button>
@@ -376,7 +405,7 @@ function WorkflowNodeCard({ id, data, selected }: NodeProps<WFNode>) {
           className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${
             isConfigured
               ? "bg-green-500/10 text-green-400 border border-green-500/30"
-              : "bg-gray-500/10 text-gray-400 border border-gray-500/30"
+              : "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30"
           }`}
         >
           {isConfigured && <CheckCircle size={10} />}
@@ -390,7 +419,7 @@ function WorkflowNodeCard({ id, data, selected }: NodeProps<WFNode>) {
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!w-3 !h-3 !bg-border !border-2 !border-card"
+        className="!w-4 !h-4 !bg-border !border-2 !border-card"
       />
     </div>
   );
@@ -507,6 +536,116 @@ function NodeSettingsPanel({ node, onClose, onSave }: SettingsPanelProps) {
                 onChange={(e) => set("remoteOnly", e.target.checked)} className="accent-accent" />
               <span className="text-sm text-text-2">Remote only</span>
             </label>
+          </>
+        )}
+
+        {/* ── LinkedIn Jobs ── */}
+        {s === "linkedin_jobs" && (
+          <>
+            <p className="text-text-2 text-[11px] -mt-1 leading-relaxed">
+              Monitors <span className="text-text">LinkedIn</span> job postings matching your criteria.
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-text-2 mb-1.5">Keywords</label>
+              <input type="text" placeholder="React, Frontend, JavaScript"
+                value={(config.keywords as string) ?? ""}
+                onChange={(e) => set("keywords", e.target.value)} className="input-base" />
+              <p className="text-text-2 text-[11px] mt-1">Comma-separated, matches title or tags</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-2 mb-1.5">Location</label>
+              <input type="text" placeholder="New York, Remote"
+                value={(config.location as string) ?? ""}
+                onChange={(e) => set("location", e.target.value)} className="input-base" />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={!!config.remoteOnly}
+                onChange={(e) => set("remoteOnly", e.target.checked)} className="accent-accent" />
+              <span className="text-sm text-text-2">Remote only</span>
+            </label>
+          </>
+        )}
+
+        {/* ── Indeed Jobs ── */}
+        {s === "indeed_jobs" && (
+          <>
+            <p className="text-text-2 text-[11px] -mt-1 leading-relaxed">
+              Monitors <span className="text-text">Indeed</span> — largest job search engine.
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-text-2 mb-1.5">Keywords</label>
+              <input type="text" placeholder="Backend, Python, Go"
+                value={(config.keywords as string) ?? ""}
+                onChange={(e) => set("keywords", e.target.value)} className="input-base" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-2 mb-1.5">Location</label>
+              <input type="text" placeholder="San Francisco, Remote"
+                value={(config.location as string) ?? ""}
+                onChange={(e) => set("location", e.target.value)} className="input-base" />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={!!config.remoteOnly}
+                onChange={(e) => set("remoteOnly", e.target.checked)} className="accent-accent" />
+              <span className="text-sm text-text-2">Remote only</span>
+            </label>
+          </>
+        )}
+
+        {/* ── AngelList Jobs ── */}
+        {s === "angellist_jobs" && (
+          <>
+            <p className="text-text-2 text-[11px] -mt-1 leading-relaxed">
+              Monitors <span className="text-text">AngelList</span> for startup and early-stage opportunities.
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-text-2 mb-1.5">Keywords</label>
+              <input type="text" placeholder="Full-Stack, Startup, Seed"
+                value={(config.keywords as string) ?? ""}
+                onChange={(e) => set("keywords", e.target.value)} className="input-base" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-2 mb-1.5">Stage</label>
+              <select value={(config.stage as string) ?? "any"}
+                onChange={(e) => set("stage", e.target.value)} className="input-base">
+                <option value="any">Any stage</option>
+                <option value="seed">Seed</option>
+                <option value="series-a">Series A</option>
+                <option value="series-b">Series B+</option>
+              </select>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={!!config.remoteOnly}
+                onChange={(e) => set("remoteOnly", e.target.checked)} className="accent-accent" />
+              <span className="text-sm text-text-2">Remote only</span>
+            </label>
+          </>
+        )}
+
+        {/* ── Company Careers ── */}
+        {s === "company_careers" && (
+          <>
+            <p className="text-text-2 text-[11px] -mt-1 leading-relaxed">
+              Monitor the careers page of a specific company directly.
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-text-2 mb-1.5">Company Name</label>
+              <input type="text" placeholder="Stripe, Anthropic…"
+                value={(config.company as string) ?? ""}
+                onChange={(e) => set("company", e.target.value)} className="input-base" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-2 mb-1.5">Careers Page URL</label>
+              <input type="url" placeholder="https://company.com/careers"
+                value={(config.careersUrl as string) ?? ""}
+                onChange={(e) => set("careersUrl", e.target.value)} className="input-base" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-2 mb-1.5">Keywords</label>
+              <input type="text" placeholder="Engineer, Frontend"
+                value={(config.keywords as string) ?? ""}
+                onChange={(e) => set("keywords", e.target.value)} className="input-base" />
+            </div>
           </>
         )}
 
@@ -728,6 +867,28 @@ function NodeSettingsPanel({ node, onClose, onSave }: SettingsPanelProps) {
               <option value="conservative">Conservative</option>
             </select>
           </div>
+        )}
+
+        {/* ── Submit Application action ── */}
+        {s === "submit_application" && (
+          <>
+            <p className="text-text-2 text-[11px] -mt-1 leading-relaxed">
+              Automatically submit job applications using your tailored resume and cover letter.
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-text-2 mb-1.5">Application Mode</label>
+              <select value={(config.mode as string) ?? "auto"}
+                onChange={(e) => set("mode", e.target.value)} className="input-base">
+                <option value="auto">Fully Automatic</option>
+                <option value="review">Review Before Submit</option>
+              </select>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={!!config.includeCoverLetter}
+                onChange={(e) => set("includeCoverLetter", e.target.checked)} className="accent-accent" />
+              <span className="text-sm text-text-2">Include cover letter</span>
+            </label>
+          </>
         )}
 
         {/* ── Save Job action ── */}
@@ -1001,8 +1162,8 @@ function WorkflowBuilderContent() {
         })),
         edges: edges.map((e) => ({
           id: e.id,
-          sourceId: e.source,
-          targetId: e.target,
+          sourceNodeId: e.source,
+          targetNodeId: e.target,
           label: e.label ?? null,
         })),
       });
@@ -1018,7 +1179,7 @@ function WorkflowBuilderContent() {
     if (!workflow) return;
     setIsRunning(true);
     try {
-      await axios.post(`/api/workflows/${workflow.id}/runs`);
+      await axios.post(`/api/workflows/${workflow.id}/runs`, {});
     } catch (err) {
       console.error("Failed to trigger run:", err);
     } finally {
@@ -1180,7 +1341,7 @@ function WorkflowBuilderContent() {
               type: "smoothstep",
               style: { stroke: "var(--color-border)", strokeWidth: 2 },
             }}
-            style={{ background: "var(--color-bg)" }}
+            style={{ background: "var(--color-canvas-bg, var(--color-bg))" }}
             proOptions={{ hideAttribution: true }}
           >
             <Background

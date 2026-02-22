@@ -17,6 +17,9 @@
 
   /* optional hovers */
   --color-surface-hover: #151b23;
+
+  /* workflow canvas */
+  --color-canvas-bg: #080d13;
 }
 
 /* ===== App globals ===== */
@@ -46,6 +49,9 @@ body {
   --color-input-focus: #16a34a;
 
   --color-surface-hover: #f1f5f9;
+
+  /* workflow canvas */
+  --color-canvas-bg: #eef2f7;
 }
 
 [data-theme="dark"] {

@@ -124,7 +124,7 @@ export class WorkflowOrchestratorService {
       await this.queue.add(subtype, payload, {
         ...jobOptions,
         // Stable job ID prevents duplicate enqueues if the endpoint is called twice
-        jobId: `${run.id}:${node.id}`,
+        jobId: `${run.id}__${node.id}`,
       });
 
       this.logger.log(`Enqueued ${subtype} for trigger node ${node.id}`);
