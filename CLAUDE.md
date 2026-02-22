@@ -181,7 +181,10 @@ uv run python enhance.py  # ATS enhancement agent — expects JSON profile via s
 
 #### Dashboard (`/dashboard`) [all protected]
 - `GET /dashboard` — Stats, 6-month chart, recent applications, upcoming interviews
+- `GET /dashboard/applications` — List all applications; optional `?search=&status=` query params
 - `POST /dashboard/applications` — Create job application
+- `PATCH /dashboard/applications/:id` — Update application fields
+- `DELETE /dashboard/applications/:id` — Delete application (204)
 - `POST /dashboard/interviews` — Create interview
 - `POST /dashboard/seed` [admin only] — Seed sample applications and interviews
 
@@ -242,10 +245,14 @@ uv run python enhance.py  # ATS enhancement agent — expects JSON profile via s
 | userEmail | string | — |
 | jobTitle | string | — |
 | company | string | — |
+| location | string | nullable; e.g. `"San Francisco, CA"` or `"Remote"` |
 | salary | string | nullable |
-| status | enum | `applied \| interview \| offer \| rejected \| withdrawn` |
+| status | enum | `applied \| screening \| interview \| offer \| rejected \| withdrawn` |
 | notes | text | nullable |
-| sourceUrl | string | nullable |
+| sourceUrl | string | nullable; URL to original job posting |
+| source | string | nullable; human-readable label e.g. `"LinkedIn"`, `"Referral"` |
+| nextAction | string | nullable; e.g. `"Technical Interview"`, `"Offer Decision Deadline"` |
+| nextActionDate | timestamp | nullable |
 | workflowRunId | string | nullable; set when created by automated workflow |
 | appliedAt | timestamp | default: CURRENT_TIMESTAMP |
 | createdAt / updatedAt | timestamp | auto |
@@ -521,7 +528,7 @@ POST /workflows/:id/runs
 - AI resume enhancement via `enhance.py` (ATS compliance + role/exp extraction)
 - Resume tailoring to job description via `main.py` (LangGraph iterative loop)
 - Dashboard with KPIs, Recharts area chart, application/interview listings
-- Job application tracking (status workflow: applied → interview → offer/rejected/withdrawn)
+- Job application tracking (status workflow: applied → screening → interview → offer/rejected/withdrawn)
 - Interview scheduling with prep status
 - Admin user management and data seeding endpoints
 - Job aggregation from 4 external sources with graceful degradation
@@ -539,12 +546,19 @@ POST /workflows/:id/runs
   - `BrowserApplyHandler` accepts both `{ job }` (from tailor) and `{ jobs[] }` (direct from filter)
 - **Docker Compose** (`server/docker-compose.yml`): Postgres 16 + Redis 7 with persistent volumes
 - **Workflow Builder UI** (`client/src/routes/WorkflowBuilder.tsx`): React Flow canvas with drag-drop palette, node settings panel, save/test-run integration
-  - Job source trigger nodes: Remotive, Arbeitnow, Greenhouse, Lever (matching real `GET /jobs` sources)
+  - Job source trigger nodes: LinkedIn, Indeed, AngelList, Company Careers (UI-only placeholders) + Remotive, Arbeitnow, Greenhouse, Lever (backend-wired)
   - Condition nodes: Job Filter, Salary Check, Location Check (all inline, backend-wired)
   - Action nodes: Submit Application, AI Tailor Resume, Save Job (backend-wired); Generate Cover Letter, Send Email, LinkedIn Message, Slack Notification (UI-only, no handlers yet)
+  - Type-based border colors: cyan=trigger, yellow=condition, blue=action; themed canvas background via `--color-canvas-bg` CSS variable
+- **Application Tracker** (`client/src/routes/ApplicationTracker.tsx`): Full CRUD page for managing job applications
+  - Stats bar: Total, Applied, Screening, Interviews, Offers, Rejected (computed from fetched data)
+  - Search by company/position + filter by status dropdown (`GET /dashboard/applications?search=&status=`)
+  - Table: Company & Position (location + salary), color-coded Status badge (icons per status), Applied Date, Next Action + datetime, Source pill, Actions
+  - Add Application modal + Edit Application modal (pre-populated) + View Details modal
+  - Status badges: Applied (clock/blue), Screening (phone/orange), Interview (video/purple), Offer (check/green), Rejected/Withdrawn (x/red or gray)
 
 ### UI Placeholders (sidebar links, no backend yet)
-- Application Tracker, Interview Calendar
+- Interview Calendar
 - Network Intelligence, Salary Intelligence
 - Skill Development, Interview Prep AI
 - Career Analytics, Browser Extension

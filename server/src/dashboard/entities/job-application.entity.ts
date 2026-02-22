@@ -8,6 +8,7 @@ import {
 
 export enum ApplicationStatus {
   APPLIED = "applied",
+  SCREENING = "screening",
   INTERVIEW = "interview",
   OFFER = "offer",
   REJECTED = "rejected",
@@ -29,6 +30,9 @@ export class JobApplication {
   company: string;
 
   @Column({ nullable: true })
+  location: string;
+
+  @Column({ nullable: true })
   salary: string;
 
   @Column({ type: "enum", enum: ApplicationStatus, default: ApplicationStatus.APPLIED })
@@ -39,6 +43,17 @@ export class JobApplication {
 
   @Column({ nullable: true })
   sourceUrl: string;
+
+  /** Human-readable source label, e.g. "LinkedIn", "Indeed", "Referral" */
+  @Column({ nullable: true })
+  source: string;
+
+  /** Short description of the next required action, e.g. "Technical Interview" */
+  @Column({ nullable: true })
+  nextAction: string;
+
+  @Column({ type: "timestamp", nullable: true })
+  nextActionDate: Date;
 
   /** Set when the application was created by an automated workflow run */
   @Column({ nullable: true })

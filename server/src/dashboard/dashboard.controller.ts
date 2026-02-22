@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Body, UseGuards } from "@nestjs/common";
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, HttpCode, HttpStatus } from "@nestjs/common";
 import { DashboardService } from "./dashboard.service";
-import { CreateApplicationDto, CreateInterviewDto } from "./dashboard.dto";
+import { CreateApplicationDto, UpdateApplicationDto, CreateInterviewDto } from "./dashboard.dto";
+import { ApplicationStatus } from "./entities/job-application.entity";
 import { JwtAuthGuard } from "@auth/guards/jwt-auth.guard";
 import { RolesGuard } from "@auth/guards/roles.guard";
 import { Roles } from "@auth/decorators/roles.decorator";
@@ -18,9 +19,33 @@ export class DashboardController {
     return this.dashboardService.getDashboardData(user.email);
   }
 
+  @Get("applications")
+  getApplications(
+    @CurrentUser() user: User,
+    @Query("search") search?: string,
+    @Query("status") status?: ApplicationStatus,
+  ) {
+    return this.dashboardService.getApplications(user.email, search, status);
+  }
+
   @Post("applications")
   createApplication(@CurrentUser() user: User, @Body() dto: CreateApplicationDto) {
     return this.dashboardService.createApplication(user.email, dto);
+  }
+
+  @Patch("applications/:id")
+  updateApplication(
+    @CurrentUser() user: User,
+    @Param("id") id: string,
+    @Body() dto: UpdateApplicationDto,
+  ) {
+    return this.dashboardService.updateApplication(id, user.email, dto);
+  }
+
+  @Delete("applications/:id")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteApplication(@CurrentUser() user: User, @Param("id") id: string) {
+    return this.dashboardService.deleteApplication(id, user.email);
   }
 
   @Post("interviews")

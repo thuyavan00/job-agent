@@ -1,6 +1,6 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, MoreThanOrEqual } from "typeorm";
+import { Repository, MoreThanOrEqual, ILike } from "typeorm";
 import { JobApplication, ApplicationStatus } from "./entities/job-application.entity";
 import { Interview, PrepStatus } from "./entities/interview.entity";
 import {
@@ -8,6 +8,7 @@ import {
   DashboardStats,
   OverviewDataPoint,
   CreateApplicationDto,
+  UpdateApplicationDto,
   CreateInterviewDto,
 } from "./dashboard.dto";
 
@@ -29,6 +30,62 @@ export class DashboardService {
     ]);
 
     return { stats, overview, recentApplications, upcomingInterviews };
+  }
+
+  async getApplications(
+    userEmail: string,
+    search?: string,
+    status?: ApplicationStatus,
+  ): Promise<JobApplication[]> {
+    const qb = this.appRepo
+      .createQueryBuilder("a")
+      .where("a.userEmail = :userEmail", { userEmail })
+      .orderBy("a.appliedAt", "DESC");
+
+    if (status) {
+      qb.andWhere("a.status = :status", { status });
+    }
+
+    if (search) {
+      qb.andWhere("(LOWER(a.company) LIKE :q OR LOWER(a.jobTitle) LIKE :q)", {
+        q: `%${search.toLowerCase()}%`,
+      });
+    }
+
+    return qb.getMany();
+  }
+
+  async updateApplication(
+    id: string,
+    userEmail: string,
+    dto: UpdateApplicationDto,
+  ): Promise<JobApplication> {
+    const app = await this.appRepo.findOne({ where: { id, userEmail } });
+    if (!app) throw new NotFoundException("Application not found");
+
+    Object.assign(app, {
+      ...(dto.jobTitle !== undefined && { jobTitle: dto.jobTitle }),
+      ...(dto.company !== undefined && { company: dto.company }),
+      ...(dto.location !== undefined && { location: dto.location }),
+      ...(dto.salary !== undefined && { salary: dto.salary }),
+      ...(dto.status !== undefined && { status: dto.status }),
+      ...(dto.notes !== undefined && { notes: dto.notes }),
+      ...(dto.sourceUrl !== undefined && { sourceUrl: dto.sourceUrl }),
+      ...(dto.source !== undefined && { source: dto.source }),
+      ...(dto.nextAction !== undefined && { nextAction: dto.nextAction }),
+      ...(dto.nextActionDate !== undefined && {
+        nextActionDate: dto.nextActionDate ? new Date(dto.nextActionDate) : null,
+      }),
+      ...(dto.appliedAt !== undefined && { appliedAt: new Date(dto.appliedAt) }),
+    });
+
+    return this.appRepo.save(app);
+  }
+
+  async deleteApplication(id: string, userEmail: string): Promise<void> {
+    const app = await this.appRepo.findOne({ where: { id, userEmail } });
+    if (!app) throw new NotFoundException("Application not found");
+    await this.appRepo.remove(app);
   }
 
   private async getStats(userEmail: string): Promise<DashboardStats> {
@@ -149,10 +206,14 @@ export class DashboardService {
       userEmail,
       jobTitle: dto.jobTitle,
       company: dto.company,
+      location: dto.location,
       salary: dto.salary,
       status: dto.status ?? ApplicationStatus.APPLIED,
       notes: dto.notes,
       sourceUrl: dto.sourceUrl,
+      source: dto.source,
+      nextAction: dto.nextAction,
+      nextActionDate: dto.nextActionDate ? new Date(dto.nextActionDate) : undefined,
       appliedAt: dto.appliedAt ? new Date(dto.appliedAt) : new Date(),
     });
     return this.appRepo.save(app);
@@ -181,15 +242,15 @@ export class DashboardService {
     const daysFromNow = (d: number) => new Date(now.getTime() + d * 24 * 60 * 60 * 1000);
 
     const applications = [
-      { jobTitle: "Senior Frontend Developer", company: "TechCorp", salary: "$120k", status: ApplicationStatus.INTERVIEW, appliedAt: daysAgo(2) },
+      { jobTitle: "Senior Frontend Developer", company: "TechCorp", location: "San Francisco, CA", salary: "$120,000 - $150,000", status: ApplicationStatus.INTERVIEW, source: "LinkedIn", nextAction: "Technical Interview", nextActionDate: daysFromNow(7), appliedAt: daysAgo(2) },
+      { jobTitle: "Full Stack Engineer", company: "StartupXYZ", location: "Remote", salary: "$95,000 - $120,000", status: ApplicationStatus.SCREENING, source: "AngelList", nextAction: "Phone Screening", nextActionDate: daysFromNow(6), appliedAt: daysAgo(8) },
+      { jobTitle: "React Developer", company: "BigTech Inc", location: "New York, NY", salary: "$110,000 - $140,000", status: ApplicationStatus.REJECTED, source: "Indeed", appliedAt: daysAgo(12) },
+      { jobTitle: "UI/UX Developer", company: "InnovateLab", location: "Austin, TX", salary: "$85,000 - $105,000", status: ApplicationStatus.APPLIED, source: "Company Website", appliedAt: daysAgo(10) },
+      { jobTitle: "Frontend Engineer", company: "CloudSoft", location: "Seattle, WA", salary: "$100,000 - $130,000", status: ApplicationStatus.OFFER, source: "Referral", nextAction: "Offer Decision Deadline", nextActionDate: daysFromNow(3), appliedAt: daysAgo(14) },
       { jobTitle: "Full Stack Engineer", company: "Stripe", salary: "$150k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(5) },
-      { jobTitle: "React Developer", company: "Airbnb", salary: "$140k", status: ApplicationStatus.REJECTED, appliedAt: daysAgo(10) },
-      { jobTitle: "Software Engineer", company: "Notion", salary: "$130k", status: ApplicationStatus.OFFER, appliedAt: daysAgo(20) },
-      { jobTitle: "Frontend Engineer", company: "Linear", salary: "$125k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(3) },
       { jobTitle: "Staff Engineer", company: "Cloudflare", salary: "$160k", status: ApplicationStatus.INTERVIEW, appliedAt: daysAgo(7) },
       { jobTitle: "Senior Engineer", company: "Discord", salary: "$135k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(14) },
       { jobTitle: "Product Engineer", company: "Retool", salary: "$145k", status: ApplicationStatus.WITHDRAWN, appliedAt: daysAgo(18) },
-      // Older entries for chart
       { jobTitle: "Software Engineer", company: "Coinbase", salary: "$155k", status: ApplicationStatus.REJECTED, appliedAt: daysAgo(40) },
       { jobTitle: "Frontend Developer", company: "Brex", salary: "$120k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(45) },
       { jobTitle: "Senior Developer", company: "Gusto", salary: "$128k", status: ApplicationStatus.INTERVIEW, appliedAt: daysAgo(50) },
