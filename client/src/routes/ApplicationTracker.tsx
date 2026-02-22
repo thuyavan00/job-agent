@@ -171,9 +171,9 @@ function AppModal({ initial, onClose, onSaved }: ModalProps) {
         nextActionDate: form.nextActionDate || undefined,
       };
       if (initial) {
-        await axios.patch(`/api/dashboard/applications/${initial.id}`, payload);
+        await axios.patch(`/api/applications/${initial.id}`, payload);
       } else {
-        await axios.post("/api/dashboard/applications", payload);
+        await axios.post("/api/applications", payload);
       }
       onSaved();
     } catch {
@@ -440,7 +440,7 @@ export default function ApplicationTracker() {
       const params: Record<string, string> = {};
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
-      const res = await axios.get<Application[]>("/api/dashboard/applications", { params });
+      const res = await axios.get<Application[]>("/api/applications", { params });
       setApps(res.data);
     } catch {
       /* no-op */
@@ -456,7 +456,7 @@ export default function ApplicationTracker() {
   async function handleDelete(id: string) {
     if (!confirm("Delete this application?")) return;
     try {
-      await axios.delete(`/api/dashboard/applications/${id}`);
+      await axios.delete(`/api/applications/${id}`);
       setApps((prev) => prev.filter((a) => a.id !== id));
     } catch {
       /* no-op */

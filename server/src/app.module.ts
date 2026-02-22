@@ -12,6 +12,8 @@ import { DashboardModule } from "./dashboard/dashboard.module";
 import { AuthModule } from "./auth/auth.module";
 import { AdminModule } from "./admin/admin.module";
 import { WorkflowModule } from "./workflow/workflow.module";
+import { ApplicationsModule } from "./applications/applications.module";
+import { InterviewsModule } from "./interviews/interviews.module";
 
 @Module({
   imports: [
@@ -51,6 +53,8 @@ import { WorkflowModule } from "./workflow/workflow.module";
     DashboardModule,
     AdminModule,
     WorkflowModule,
+    ApplicationsModule,
+    InterviewsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

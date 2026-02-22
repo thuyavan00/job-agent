@@ -21,7 +21,9 @@
       "@auth/*": ["src/auth/*"],
       "@jobs/*": ["src/jobs/*"],
       "@dashboard/*": ["src/dashboard/*"],
-      "@workflow/*": ["src/workflow/*"]
+      "@workflow/*": ["src/workflow/*"],
+      "@applications/*": ["src/applications/*"],
+      "@interviews/*": ["src/interviews/*"]
     },
     "incremental": true,
     "skipLibCheck": true,

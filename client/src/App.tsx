@@ -17,6 +17,7 @@ import Dashboard from "./routes/Dashboard";
 import UserProfile from "./routes/UserProfile";
 import WorkflowBuilder from "./routes/WorkflowBuilder";
 import ApplicationTracker from "./routes/ApplicationTracker";
+import InterviewCalendar from "./routes/InterviewCalendar";
 import Login from "./routes/Login";
 import Register from "./routes/Register";
 
@@ -37,6 +38,7 @@ function AppShell() {
           <Route path="/ai-job-match" element={<JobMatch />} />
           <Route path="/workflow-builder" element={<WorkflowBuilder />} />
           <Route path="/application-tracker" element={<ApplicationTracker />} />
+          <Route path="/interview-calendar" element={<InterviewCalendar />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/profile" element={<UserProfile />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

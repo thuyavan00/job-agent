@@ -1,15 +1,12 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository, MoreThanOrEqual, ILike } from "typeorm";
+import { Repository, MoreThanOrEqual } from "typeorm";
 import { JobApplication, ApplicationStatus } from "./entities/job-application.entity";
 import { Interview, PrepStatus } from "./entities/interview.entity";
 import {
   DashboardData,
   DashboardStats,
   OverviewDataPoint,
-  CreateApplicationDto,
-  UpdateApplicationDto,
-  CreateInterviewDto,
 } from "./dashboard.dto";
 
 @Injectable()
@@ -32,60 +29,64 @@ export class DashboardService {
     return { stats, overview, recentApplications, upcomingInterviews };
   }
 
-  async getApplications(
-    userEmail: string,
-    search?: string,
-    status?: ApplicationStatus,
-  ): Promise<JobApplication[]> {
-    const qb = this.appRepo
-      .createQueryBuilder("a")
-      .where("a.userEmail = :userEmail", { userEmail })
-      .orderBy("a.appliedAt", "DESC");
-
-    if (status) {
-      qb.andWhere("a.status = :status", { status });
+  async seedSampleData(userEmail: string): Promise<{ message: string }> {
+    const existingCount = await this.appRepo.count({ where: { userEmail } });
+    if (existingCount > 0) {
+      return { message: "Data already exists, skipping seed." };
     }
 
-    if (search) {
-      qb.andWhere("(LOWER(a.company) LIKE :q OR LOWER(a.jobTitle) LIKE :q)", {
-        q: `%${search.toLowerCase()}%`,
-      });
-    }
+    const now = new Date();
+    const daysAgo = (d: number) => new Date(now.getTime() - d * 24 * 60 * 60 * 1000);
+    const daysFromNow = (d: number) => new Date(now.getTime() + d * 24 * 60 * 60 * 1000);
 
-    return qb.getMany();
-  }
+    const applications = [
+      { jobTitle: "Senior Frontend Developer", company: "TechCorp", location: "San Francisco, CA", salary: "$120,000 - $150,000", status: ApplicationStatus.INTERVIEW, source: "LinkedIn", nextAction: "Technical Interview", nextActionDate: daysFromNow(7), appliedAt: daysAgo(2) },
+      { jobTitle: "Full Stack Engineer", company: "StartupXYZ", location: "Remote", salary: "$95,000 - $120,000", status: ApplicationStatus.SCREENING, source: "AngelList", nextAction: "Phone Screening", nextActionDate: daysFromNow(6), appliedAt: daysAgo(8) },
+      { jobTitle: "React Developer", company: "BigTech Inc", location: "New York, NY", salary: "$110,000 - $140,000", status: ApplicationStatus.REJECTED, source: "Indeed", appliedAt: daysAgo(12) },
+      { jobTitle: "UI/UX Developer", company: "InnovateLab", location: "Austin, TX", salary: "$85,000 - $105,000", status: ApplicationStatus.APPLIED, source: "Company Website", appliedAt: daysAgo(10) },
+      { jobTitle: "Frontend Engineer", company: "CloudSoft", location: "Seattle, WA", salary: "$100,000 - $130,000", status: ApplicationStatus.OFFER, source: "Referral", nextAction: "Offer Decision Deadline", nextActionDate: daysFromNow(3), appliedAt: daysAgo(14) },
+      { jobTitle: "Full Stack Engineer", company: "Stripe", salary: "$150k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(5) },
+      { jobTitle: "Staff Engineer", company: "Cloudflare", salary: "$160k", status: ApplicationStatus.INTERVIEW, appliedAt: daysAgo(7) },
+      { jobTitle: "Senior Engineer", company: "Discord", salary: "$135k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(14) },
+      { jobTitle: "Product Engineer", company: "Retool", salary: "$145k", status: ApplicationStatus.WITHDRAWN, appliedAt: daysAgo(18) },
+      { jobTitle: "Software Engineer", company: "Coinbase", salary: "$155k", status: ApplicationStatus.REJECTED, appliedAt: daysAgo(40) },
+      { jobTitle: "Frontend Developer", company: "Brex", salary: "$120k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(45) },
+      { jobTitle: "Senior Developer", company: "Gusto", salary: "$128k", status: ApplicationStatus.INTERVIEW, appliedAt: daysAgo(50) },
+      { jobTitle: "Engineer II", company: "Rippling", salary: "$132k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(55) },
+      { jobTitle: "React Engineer", company: "Loom", salary: "$118k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(60) },
+      { jobTitle: "Full Stack Dev", company: "Intercom", salary: "$125k", status: ApplicationStatus.OFFER, appliedAt: daysAgo(65) },
+      { jobTitle: "Frontend Eng", company: "Reddit", salary: "$140k", status: ApplicationStatus.REJECTED, appliedAt: daysAgo(70) },
+      { jobTitle: "Software Dev", company: "Airtable", salary: "$138k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(80) },
+      { jobTitle: "Senior SWE", company: "Lyft", salary: "$145k", status: ApplicationStatus.INTERVIEW, appliedAt: daysAgo(90) },
+      { jobTitle: "UI Engineer", company: "Coda", salary: "$115k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(100) },
+      { jobTitle: "JS Developer", company: "Figma", salary: "$130k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(110) },
+      { jobTitle: "Software Engineer", company: "Vercel", salary: "$142k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(120) },
+      { jobTitle: "Senior Frontend", company: "Netlify", salary: "$122k", status: ApplicationStatus.REJECTED, appliedAt: daysAgo(130) },
+      { jobTitle: "Platform Engineer", company: "Fastly", salary: "$148k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(140) },
+      { jobTitle: "Senior Dev", company: "Twilio", salary: "$136k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(150) },
+      { jobTitle: "Frontend Architect", company: "Auth0", salary: "$155k", status: ApplicationStatus.OFFER, appliedAt: daysAgo(155) },
+      { jobTitle: "SWE III", company: "Segment", salary: "$128k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(160) },
+      { jobTitle: "React Dev", company: "Mixpanel", salary: "$118k", status: ApplicationStatus.REJECTED, appliedAt: daysAgo(165) },
+      { jobTitle: "Software Engineer", company: "Amplitude", salary: "$132k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(170) },
+      { jobTitle: "Senior FE", company: "LaunchDarkly", salary: "$140k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(175) },
+    ];
 
-  async updateApplication(
-    id: string,
-    userEmail: string,
-    dto: UpdateApplicationDto,
-  ): Promise<JobApplication> {
-    const app = await this.appRepo.findOne({ where: { id, userEmail } });
-    if (!app) throw new NotFoundException("Application not found");
+    const interviews = [
+      { jobTitle: "Senior Frontend Developer", company: "TechCorp", scheduledAt: daysFromNow(1), prepStatus: PrepStatus.PREP_PENDING },
+      { jobTitle: "Staff Engineer", company: "Cloudflare", scheduledAt: daysFromNow(3), prepStatus: PrepStatus.PREPPING },
+      { jobTitle: "Senior Engineer", company: "Gusto", scheduledAt: daysFromNow(7), prepStatus: PrepStatus.READY },
+      { jobTitle: "Senior SWE", company: "Lyft", scheduledAt: daysFromNow(10), prepStatus: PrepStatus.PREP_PENDING },
+      { jobTitle: "Full Stack Engineer", company: "Stripe", scheduledAt: daysFromNow(14), prepStatus: PrepStatus.PREP_PENDING },
+    ];
 
-    Object.assign(app, {
-      ...(dto.jobTitle !== undefined && { jobTitle: dto.jobTitle }),
-      ...(dto.company !== undefined && { company: dto.company }),
-      ...(dto.location !== undefined && { location: dto.location }),
-      ...(dto.salary !== undefined && { salary: dto.salary }),
-      ...(dto.status !== undefined && { status: dto.status }),
-      ...(dto.notes !== undefined && { notes: dto.notes }),
-      ...(dto.sourceUrl !== undefined && { sourceUrl: dto.sourceUrl }),
-      ...(dto.source !== undefined && { source: dto.source }),
-      ...(dto.nextAction !== undefined && { nextAction: dto.nextAction }),
-      ...(dto.nextActionDate !== undefined && {
-        nextActionDate: dto.nextActionDate ? new Date(dto.nextActionDate) : null,
-      }),
-      ...(dto.appliedAt !== undefined && { appliedAt: new Date(dto.appliedAt) }),
-    });
+    await this.appRepo.save(
+      applications.map((a) => this.appRepo.create({ ...a, userEmail })),
+    );
+    await this.interviewRepo.save(
+      interviews.map((i) => this.interviewRepo.create({ ...i, userEmail })),
+    );
 
-    return this.appRepo.save(app);
-  }
-
-  async deleteApplication(id: string, userEmail: string): Promise<void> {
-    const app = await this.appRepo.findOne({ where: { id, userEmail } });
-    if (!app) throw new NotFoundException("Application not found");
-    await this.appRepo.remove(app);
+    return { message: "Sample data seeded successfully." };
   }
 
   private async getStats(userEmail: string): Promise<DashboardStats> {
@@ -97,16 +98,10 @@ export class DashboardService {
       await Promise.all([
         this.appRepo.count({ where: { userEmail } }),
         this.appRepo.count({ where: { userEmail, appliedAt: MoreThanOrEqual(thirtyDaysAgo) } }),
-        this.appRepo.count({
-          where: { userEmail, appliedAt: MoreThanOrEqual(sixtyDaysAgo) },
-        }),
+        this.appRepo.count({ where: { userEmail, appliedAt: MoreThanOrEqual(sixtyDaysAgo) } }),
         this.interviewRepo.count({ where: { userEmail } }),
-        this.interviewRepo.count({
-          where: { userEmail, scheduledAt: MoreThanOrEqual(thirtyDaysAgo) },
-        }),
-        this.interviewRepo.count({
-          where: { userEmail, scheduledAt: MoreThanOrEqual(sixtyDaysAgo) },
-        }),
+        this.interviewRepo.count({ where: { userEmail, scheduledAt: MoreThanOrEqual(thirtyDaysAgo) } }),
+        this.interviewRepo.count({ where: { userEmail, scheduledAt: MoreThanOrEqual(sixtyDaysAgo) } }),
         this.appRepo.count({ where: { userEmail, status: ApplicationStatus.OFFER } }),
       ]);
 
@@ -199,95 +194,5 @@ export class DashboardService {
         .join("")
         .toUpperCase(),
     }));
-  }
-
-  async createApplication(userEmail: string, dto: CreateApplicationDto): Promise<JobApplication> {
-    const app = this.appRepo.create({
-      userEmail,
-      jobTitle: dto.jobTitle,
-      company: dto.company,
-      location: dto.location,
-      salary: dto.salary,
-      status: dto.status ?? ApplicationStatus.APPLIED,
-      notes: dto.notes,
-      sourceUrl: dto.sourceUrl,
-      source: dto.source,
-      nextAction: dto.nextAction,
-      nextActionDate: dto.nextActionDate ? new Date(dto.nextActionDate) : undefined,
-      appliedAt: dto.appliedAt ? new Date(dto.appliedAt) : new Date(),
-    });
-    return this.appRepo.save(app);
-  }
-
-  async createInterview(userEmail: string, dto: CreateInterviewDto): Promise<Interview> {
-    const interview = this.interviewRepo.create({
-      userEmail,
-      jobTitle: dto.jobTitle,
-      company: dto.company,
-      scheduledAt: new Date(dto.scheduledAt),
-      prepStatus: dto.prepStatus ?? PrepStatus.PREP_PENDING,
-      notes: dto.notes,
-    });
-    return this.interviewRepo.save(interview);
-  }
-
-  async seedSampleData(userEmail: string): Promise<{ message: string }> {
-    const existingCount = await this.appRepo.count({ where: { userEmail } });
-    if (existingCount > 0) {
-      return { message: "Data already exists, skipping seed." };
-    }
-
-    const now = new Date();
-    const daysAgo = (d: number) => new Date(now.getTime() - d * 24 * 60 * 60 * 1000);
-    const daysFromNow = (d: number) => new Date(now.getTime() + d * 24 * 60 * 60 * 1000);
-
-    const applications = [
-      { jobTitle: "Senior Frontend Developer", company: "TechCorp", location: "San Francisco, CA", salary: "$120,000 - $150,000", status: ApplicationStatus.INTERVIEW, source: "LinkedIn", nextAction: "Technical Interview", nextActionDate: daysFromNow(7), appliedAt: daysAgo(2) },
-      { jobTitle: "Full Stack Engineer", company: "StartupXYZ", location: "Remote", salary: "$95,000 - $120,000", status: ApplicationStatus.SCREENING, source: "AngelList", nextAction: "Phone Screening", nextActionDate: daysFromNow(6), appliedAt: daysAgo(8) },
-      { jobTitle: "React Developer", company: "BigTech Inc", location: "New York, NY", salary: "$110,000 - $140,000", status: ApplicationStatus.REJECTED, source: "Indeed", appliedAt: daysAgo(12) },
-      { jobTitle: "UI/UX Developer", company: "InnovateLab", location: "Austin, TX", salary: "$85,000 - $105,000", status: ApplicationStatus.APPLIED, source: "Company Website", appliedAt: daysAgo(10) },
-      { jobTitle: "Frontend Engineer", company: "CloudSoft", location: "Seattle, WA", salary: "$100,000 - $130,000", status: ApplicationStatus.OFFER, source: "Referral", nextAction: "Offer Decision Deadline", nextActionDate: daysFromNow(3), appliedAt: daysAgo(14) },
-      { jobTitle: "Full Stack Engineer", company: "Stripe", salary: "$150k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(5) },
-      { jobTitle: "Staff Engineer", company: "Cloudflare", salary: "$160k", status: ApplicationStatus.INTERVIEW, appliedAt: daysAgo(7) },
-      { jobTitle: "Senior Engineer", company: "Discord", salary: "$135k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(14) },
-      { jobTitle: "Product Engineer", company: "Retool", salary: "$145k", status: ApplicationStatus.WITHDRAWN, appliedAt: daysAgo(18) },
-      { jobTitle: "Software Engineer", company: "Coinbase", salary: "$155k", status: ApplicationStatus.REJECTED, appliedAt: daysAgo(40) },
-      { jobTitle: "Frontend Developer", company: "Brex", salary: "$120k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(45) },
-      { jobTitle: "Senior Developer", company: "Gusto", salary: "$128k", status: ApplicationStatus.INTERVIEW, appliedAt: daysAgo(50) },
-      { jobTitle: "Engineer II", company: "Rippling", salary: "$132k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(55) },
-      { jobTitle: "React Engineer", company: "Loom", salary: "$118k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(60) },
-      { jobTitle: "Full Stack Dev", company: "Intercom", salary: "$125k", status: ApplicationStatus.OFFER, appliedAt: daysAgo(65) },
-      { jobTitle: "Frontend Eng", company: "Reddit", salary: "$140k", status: ApplicationStatus.REJECTED, appliedAt: daysAgo(70) },
-      { jobTitle: "Software Dev", company: "Airtable", salary: "$138k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(80) },
-      { jobTitle: "Senior SWE", company: "Lyft", salary: "$145k", status: ApplicationStatus.INTERVIEW, appliedAt: daysAgo(90) },
-      { jobTitle: "UI Engineer", company: "Coda", salary: "$115k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(100) },
-      { jobTitle: "JS Developer", company: "Figma", salary: "$130k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(110) },
-      { jobTitle: "Software Engineer", company: "Vercel", salary: "$142k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(120) },
-      { jobTitle: "Senior Frontend", company: "Netlify", salary: "$122k", status: ApplicationStatus.REJECTED, appliedAt: daysAgo(130) },
-      { jobTitle: "Platform Engineer", company: "Fastly", salary: "$148k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(140) },
-      { jobTitle: "Senior Dev", company: "Twilio", salary: "$136k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(150) },
-      { jobTitle: "Frontend Architect", company: "Auth0", salary: "$155k", status: ApplicationStatus.OFFER, appliedAt: daysAgo(155) },
-      { jobTitle: "SWE III", company: "Segment", salary: "$128k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(160) },
-      { jobTitle: "React Dev", company: "Mixpanel", salary: "$118k", status: ApplicationStatus.REJECTED, appliedAt: daysAgo(165) },
-      { jobTitle: "Software Engineer", company: "Amplitude", salary: "$132k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(170) },
-      { jobTitle: "Senior FE", company: "LaunchDarkly", salary: "$140k", status: ApplicationStatus.APPLIED, appliedAt: daysAgo(175) },
-    ];
-
-    const interviews = [
-      { jobTitle: "Senior Frontend Developer", company: "TechCorp", scheduledAt: daysFromNow(1), prepStatus: PrepStatus.PREP_PENDING },
-      { jobTitle: "Staff Engineer", company: "Cloudflare", scheduledAt: daysFromNow(3), prepStatus: PrepStatus.PREPPING },
-      { jobTitle: "Senior Engineer", company: "Gusto", scheduledAt: daysFromNow(7), prepStatus: PrepStatus.READY },
-      { jobTitle: "Senior SWE", company: "Lyft", scheduledAt: daysFromNow(10), prepStatus: PrepStatus.PREP_PENDING },
-      { jobTitle: "Full Stack Engineer", company: "Stripe", scheduledAt: daysFromNow(14), prepStatus: PrepStatus.PREP_PENDING },
-    ];
-
-    await this.appRepo.save(
-      applications.map((a) => this.appRepo.create({ ...a, userEmail })),
-    );
-    await this.interviewRepo.save(
-      interviews.map((i) => this.interviewRepo.create({ ...i, userEmail })),
-    );
-
-    return { message: "Sample data seeded successfully." };
   }
 }
