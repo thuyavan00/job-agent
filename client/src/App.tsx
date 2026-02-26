@@ -19,6 +19,7 @@ import WorkflowBuilder from "./routes/WorkflowBuilder";
 import ApplicationTracker from "./routes/ApplicationTracker";
 import InterviewCalendar from "./routes/InterviewCalendar";
 import NetworkIntelligence from "./routes/NetworkIntelligence";
+import SalaryIntelligence from "./routes/SalaryIntelligence";
 import Login from "./routes/Login";
 import Register from "./routes/Register";
 
@@ -41,6 +42,7 @@ function AppShell() {
           <Route path="/application-tracker" element={<ApplicationTracker />} />
           <Route path="/interview-calendar" element={<InterviewCalendar />} />
           <Route path="/network-intelligence" element={<NetworkIntelligence />} />
+          <Route path="/salary-intelligence" element={<SalaryIntelligence />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/profile" element={<UserProfile />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
